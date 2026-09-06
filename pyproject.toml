@@ -1,0 +1,71 @@
+[project]
+name = "avrora-bot"
+version = "0.1.0"
+readme = "README.md"
+authors = [
+    { name = "Sedova_OV", email = "frenzied89@mail.ru" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "vkbottle>=4.11",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.31",
+    "alembic>=1.19",
+    "pydantic-settings>=2.15",
+    "apscheduler>=3.11,<4",
+    "openpyxl>=3.1",
+    "structlog>=26",
+]
+
+[project.scripts]
+avrora-bot = "avrora_bot:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "aiosqlite>=0.20",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.7,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py314"
+line-length = 80
+
+[tool.ruff.format]
+quote-style = 'single'
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = 'single'
+
+[tool.ruff.lint]
+select = ['F', 'E', 'W', 'I', 'BLE', 'UP', 'LOG', 'T20', 'PTH', 'ERA', 'N', 'SIM', 'PERF', 'PL']
+task-tags = ["TODO", "FIXME", "XXX", 'yapf']
+ignore = ['PLE0604', 'PLR0904', 'PLR0911', 'PLR0912', 'PLR0913', 'PLR0914', 'PLR0915', 'PLR0917']
+
+[tool.ruff.lint.per-file-ignores]
+# удаление неиспользуемых импортов в файлах __init__
+"__init__.py" = ["F401"]
+# отсутствие аннотации типов для аргументов и возвращаемого значения
+"*/adapters/database/alembic/*" = ['ERA', 'E501', 'I001', 'W291', 'UP', 'N999']
+# использование "магических чисел" (явного указания числа в коде) не через константы
+"tests/*" = ['PLR2004']
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 100 # Format будет преобразовывать строки > 80 символов, а linter будет ругаться на >100 символов (кейс - слишком длинный импорт)
+
+[tool.ruff.lint.isort]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder", ]
+known-first-party = ["avrora_bot"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.coverage.report]
+exclude_lines = [
+    "@abstractmethod"
+]

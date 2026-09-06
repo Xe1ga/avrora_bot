@@ -1,0 +1,6 @@
+{
+    "enabledPlugins": {
+        "atlas@evraz-pack": false,
+        "backend-python@evraz-pack": false
+    }
+}

@@ -1,0 +1,14 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.env
+.ruff_cache
+.pytest_cache
+.claude
+Оплата абонементов.md
+Техническое задание.md
+Техническое задание на разработку.md
+Опла*
+Техн*
