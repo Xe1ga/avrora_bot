@@ -1,14 +1,17 @@
 """Конфигурация приложения из переменных окружения (.env).
 
-Секреты (токен VK, пароль БД) хранятся как ``SecretStr`` и не попадают в
-логи при случайном выводе объекта настроек. Файл ``.env`` не коммитится в
-репозиторий (см. .gitignore), для шаблона используется ``.env.example``.
+Секреты (токен VK, пароль БД, ключ шифрования PII) хранятся как
+``SecretStr`` и не попадают в логи при случайном выводе объекта настроек.
+Файл ``.env`` не коммитится в репозиторий (см. .gitignore), для шаблона
+используется ``.env.example``.
 """
 
 from functools import lru_cache
 
 from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from avrora_bot.adapters.database.crypto import decode_pii_key
 
 
 class Settings(BaseSettings):
@@ -35,6 +38,11 @@ class Settings(BaseSettings):
     postgres_user: str = 'avrora'
     postgres_password: SecretStr
 
+    # --- Шифрование персональных данных (ФИО, телефон) ---
+    # 32 байта в base64 (AES-256-GCM). Генерация:
+    #   python -c "import secrets,base64;print(base64.b64encode(secrets.token_bytes(32)).decode())"
+    pii_encryption_key: SecretStr
+
     # --- Bootstrap первого администратора ---
     # vk_id пользователя, которому при старте назначается роль admin,
     # чтобы было кому управлять ролями остальных.
@@ -56,6 +64,13 @@ class Settings(BaseSettings):
         """Пустая строка в .env трактуется как отсутствие значения."""
         if isinstance(value, str) and value.strip() == '':
             return None
+        return value
+
+    @field_validator('pii_encryption_key')
+    @classmethod
+    def _validate_pii_encryption_key(cls, value: SecretStr) -> SecretStr:
+        """Проверяет ключ шифрования при старте (fail-fast)."""
+        decode_pii_key(value.get_secret_value())
         return value
 
     @computed_field  # type: ignore[prop-decorator]

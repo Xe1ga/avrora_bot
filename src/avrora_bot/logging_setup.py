@@ -5,6 +5,25 @@ import sys
 
 import structlog
 
+# Ключи kwargs, значения которых маскируются перед выводом в лог (защита
+# от случайной утечки персональных данных, если их всё же передадут в
+# log.info(..., full_name=..., phone=...)). Не защищает от PII, вписанного
+# прямо в текст события (f-строки) — такого паттерна в проекте нет и его
+# не следует добавлять.
+_SENSITIVE_LOG_KEYS = frozenset({'full_name', 'phone', 'phone_number'})
+
+
+def _redact_pii_processor(
+    logger: object,
+    method_name: str,
+    event_dict: structlog.types.EventDict,
+) -> structlog.types.EventDict:
+    """Маскирует известные PII-ключи, если они попали в event_dict."""
+    for key in _SENSITIVE_LOG_KEYS:
+        if key in event_dict:
+            event_dict[key] = '***REDACTED***'
+    return event_dict
+
 
 def configure_logging(level: str = 'INFO') -> None:
     """Конфигурирует structlog + стандартный logging.
@@ -23,6 +42,7 @@ def configure_logging(level: str = 'INFO') -> None:
 
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
+        _redact_pii_processor,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt='iso', utc=True),
         structlog.processors.StackInfoRenderer(),

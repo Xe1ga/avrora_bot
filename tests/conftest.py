@@ -6,9 +6,13 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from avrora_bot.adapters.database.base import Base
+from avrora_bot.adapters.database.crypto import PiiCipher
 from avrora_bot.adapters.database.engine import create_session_factory
 from avrora_bot.adapters.database.unit_of_work import SqlAlchemyUnitOfWork
 from avrora_bot.domain.ports.uow import UnitOfWork
+
+# Фиксированный тестовый ключ (32 байта) — не для продакшена.
+_TEST_PII_KEY = b'0' * 32
 
 
 class FakeVkGateway:
@@ -37,9 +41,10 @@ async def uow_factory() -> AsyncIterator[Callable[[], UnitOfWork]]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     session_factory = create_session_factory(engine)
+    cipher = PiiCipher(_TEST_PII_KEY)
 
     def factory() -> UnitOfWork:
-        return SqlAlchemyUnitOfWork(session_factory)
+        return SqlAlchemyUnitOfWork(session_factory, cipher)
 
     yield factory
     await engine.dispose()

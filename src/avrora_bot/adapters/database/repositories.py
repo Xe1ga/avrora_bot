@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from avrora_bot.adapters.database import models as m
+from avrora_bot.adapters.database.crypto import PiiCipher
 from avrora_bot.domain import entities as e
 from avrora_bot.domain.enums import (
     EventType,
@@ -26,15 +27,31 @@ from avrora_bot.domain.value_objects import MonthPeriod
 # ─────────────────────────── мапперы ORM → domain ──────────────────────────
 
 
-def _user_to_domain(row: m.User) -> e.User:
+# Опции загрузки, применяемые ко всем select/get пользователей, чтобы
+# получить ФИО/телефон/ДР/рост без N+1 запросов (одним batch-selectinload
+# на каждую связь, независимо от числа пользователей).
+_USER_LOAD_OPTIONS = (
+    selectinload(m.User.role_links),
+    selectinload(m.User.full_name_link),
+    selectinload(m.User.phone_link),
+    selectinload(m.User.birthdate_link),
+    selectinload(m.User.height_link),
+)
+
+
+def _user_to_domain(row: m.User, cipher: PiiCipher) -> e.User:
+    full_name = cipher.decrypt_str(row.full_name_link.full_name_enc)
+    phone = cipher.decrypt_opt(
+        row.phone_link.phone_enc if row.phone_link else None
+    )
     return e.User(
         id=row.id,
         vk_id=row.vk_id,
-        full_name=row.full_name,
+        full_name=full_name,
         status=UserStatus(row.status),
-        birthdate=row.birthdate,
-        height_cm=row.height_cm,
-        phone=row.phone,
+        birthdate=row.birthdate_link.birthdate if row.birthdate_link else None,
+        height_cm=row.height_link.height_cm if row.height_link else None,
+        phone=phone,
         created_at=row.created_at,
         roles={RoleName(link.role) for link in row.role_links},
     )
@@ -122,73 +139,91 @@ def _action_to_domain(row: m.ActionLog) -> e.ActionLogEntry:
 
 
 class SqlUserRepository:
-    """Репозиторий пользователей."""
+    """Репозиторий пользователей.
 
-    def __init__(self, session: AsyncSession) -> None:
+    Шифрует/расшифровывает ФИО и телефон на границе с БД (``PiiCipher``);
+    остальной код работает с доменной сущностью ``e.User`` как с plaintext.
+    """
+
+    def __init__(self, session: AsyncSession, cipher: PiiCipher) -> None:
         self._s = session
+        self._cipher = cipher
 
     async def get_by_vk_id(self, vk_id: int) -> e.User | None:
         row = await self._s.scalar(
             select(m.User)
-            .options(selectinload(m.User.role_links))
+            .options(*_USER_LOAD_OPTIONS)
             .where(m.User.vk_id == vk_id)
         )
-        return _user_to_domain(row) if row else None
+        return _user_to_domain(row, self._cipher) if row else None
 
     async def get_by_id(self, user_id: int) -> e.User | None:
         row = await self._s.get(
-            m.User, user_id, options=[selectinload(m.User.role_links)]
+            m.User, user_id, options=list(_USER_LOAD_OPTIONS)
         )
-        return _user_to_domain(row) if row else None
+        return _user_to_domain(row, self._cipher) if row else None
 
     async def add(self, user: e.User) -> e.User:
-        row = m.User(
-            vk_id=user.vk_id,
-            full_name=user.full_name,
-            status=user.status,
-            birthdate=user.birthdate,
-            height_cm=user.height_cm,
-            phone=user.phone,
+        row = m.User(vk_id=user.vk_id, status=user.status)
+        row.full_name_link = m.UserFullName(
+            full_name_enc=self._cipher.encrypt_str(user.full_name)
         )
+        row.phone_link = m.UserPhone(
+            phone_enc=self._cipher.encrypt_opt(user.phone)
+        )
+        row.birthdate_link = m.UserBirthdate(birthdate=user.birthdate)
+        row.height_link = m.UserHeight(height_cm=user.height_cm)
         self._s.add(row)
         await self._s.flush()
-        await self._s.refresh(row, attribute_names=['role_links'])
-        return _user_to_domain(row)
+        await self._s.refresh(
+            row,
+            attribute_names=[
+                'role_links',
+                'full_name_link',
+                'phone_link',
+                'birthdate_link',
+                'height_link',
+            ],
+        )
+        return _user_to_domain(row, self._cipher)
 
     async def update(self, user: e.User) -> None:
-        row = await self._s.get(m.User, user.id)
+        row = await self._s.get(
+            m.User, user.id, options=list(_USER_LOAD_OPTIONS)
+        )
         if row is None:
             return
-        row.full_name = user.full_name
         row.status = user.status
-        row.birthdate = user.birthdate
-        row.height_cm = user.height_cm
-        row.phone = user.phone
+        row.full_name_link.full_name_enc = self._cipher.encrypt_str(
+            user.full_name
+        )
+        row.phone_link.phone_enc = self._cipher.encrypt_opt(user.phone)
+        row.birthdate_link.birthdate = user.birthdate
+        row.height_link.height_cm = user.height_cm
         await self._s.flush()
 
     async def list_by_status(self, status: UserStatus) -> list[e.User]:
         rows = await self._s.scalars(
             select(m.User)
-            .options(selectinload(m.User.role_links))
+            .options(*_USER_LOAD_OPTIONS)
             .where(m.User.status == status)
             .order_by(m.User.id)
         )
-        return [_user_to_domain(r) for r in rows]
+        return [_user_to_domain(r, self._cipher) for r in rows]
 
     async def list_all(self) -> list[e.User]:
         rows = await self._s.scalars(
-            select(m.User)
-            .options(selectinload(m.User.role_links))
-            .order_by(m.User.id)
+            select(m.User).options(*_USER_LOAD_OPTIONS).order_by(m.User.id)
         )
-        return [_user_to_domain(r) for r in rows]
+        return [_user_to_domain(r, self._cipher) for r in rows]
 
 
 class SqlRoleRepository:
     """Репозиторий ролей."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, cipher: PiiCipher) -> None:
         self._s = session
+        self._cipher = cipher
 
     async def assign(self, user_id: int, role: RoleName) -> None:
         exists = await self._s.scalar(
@@ -219,12 +254,12 @@ class SqlRoleRepository:
     async def users_with_role(self, role: RoleName) -> list[e.User]:
         rows = await self._s.scalars(
             select(m.User)
-            .options(selectinload(m.User.role_links))
+            .options(*_USER_LOAD_OPTIONS)
             .join(m.UserRole, m.UserRole.user_id == m.User.id)
             .where(m.UserRole.role == role)
             .order_by(m.User.id)
         )
-        return [_user_to_domain(r) for r in rows.unique()]
+        return [_user_to_domain(r, self._cipher) for r in rows.unique()]
 
 
 class SqlTariffRepository:

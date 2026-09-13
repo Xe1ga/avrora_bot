@@ -19,6 +19,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -39,8 +40,6 @@ from avrora_bot.domain.enums import (
 )
 
 # Длины строковых полей.
-_NAME_LEN = 256
-_PHONE_LEN = 32
 _PLACE_LEN = 256
 _ACTION_LEN = 128
 _ENUM_LEN = 32
@@ -65,7 +64,13 @@ class UserRole(Base):
 
 
 class User(Base, TimestampMixin):
-    """Пользователь клуба."""
+    """Пользователь клуба.
+
+    Персональные данные (ФИО, телефон, дата рождения, рост) вынесены в
+    отдельные таблицы 1:1 (см. ``UserFullName``, ``UserPhone``,
+    ``UserBirthdate``, ``UserHeight``) — ФИО и телефон дополнительно
+    шифруются на уровне приложения (``adapters/database/crypto.py``).
+    """
 
     __tablename__ = 'users'
 
@@ -73,17 +78,77 @@ class User(Base, TimestampMixin):
     vk_id: Mapped[int] = mapped_column(
         Integer, unique=True, index=True, nullable=False
     )
-    full_name: Mapped[str] = mapped_column(String(_NAME_LEN))
     status: Mapped[UserStatus] = mapped_column(
         String(_ENUM_LEN), default=UserStatus.PENDING
     )
-    birthdate: Mapped[date | None] = mapped_column(Date, nullable=True)
-    height_cm: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    phone: Mapped[str | None] = mapped_column(String(_PHONE_LEN), nullable=True)
 
     role_links: Mapped[list[UserRole]] = relationship(
         back_populates='user', cascade='all, delete-orphan'
     )
+    full_name_link: Mapped[UserFullName | None] = relationship(
+        back_populates='user', cascade='all, delete-orphan', uselist=False
+    )
+    phone_link: Mapped[UserPhone | None] = relationship(
+        back_populates='user', cascade='all, delete-orphan', uselist=False
+    )
+    birthdate_link: Mapped[UserBirthdate | None] = relationship(
+        back_populates='user', cascade='all, delete-orphan', uselist=False
+    )
+    height_link: Mapped[UserHeight | None] = relationship(
+        back_populates='user', cascade='all, delete-orphan', uselist=False
+    )
+
+
+class UserFullName(Base):
+    """ФИО пользователя, хранится в зашифрованном виде (AES-256-GCM)."""
+
+    __tablename__ = 'user_full_names'
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), primary_key=True
+    )
+    full_name_enc: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    user: Mapped[User] = relationship(back_populates='full_name_link')
+
+
+class UserPhone(Base):
+    """Телефон пользователя, хранится в зашифрованном виде (AES-256-GCM)."""
+
+    __tablename__ = 'user_phones'
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), primary_key=True
+    )
+    phone_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+
+    user: Mapped[User] = relationship(back_populates='phone_link')
+
+
+class UserBirthdate(Base):
+    """Дата рождения пользователя (без шифрования)."""
+
+    __tablename__ = 'user_birthdates'
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), primary_key=True
+    )
+    birthdate: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    user: Mapped[User] = relationship(back_populates='birthdate_link')
+
+
+class UserHeight(Base):
+    """Рост пользователя, см (без шифрования)."""
+
+    __tablename__ = 'user_heights'
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), primary_key=True
+    )
+    height_cm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    user: Mapped[User] = relationship(back_populates='height_link')
 
 
 class Tariff(Base):

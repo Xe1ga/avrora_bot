@@ -21,6 +21,12 @@ async def record_action(
 
     Запись выполняется в рамках уже открытой транзакции ``uow`` (commit —
     ответственность вызывающего use case).
+
+    ВАЖНО: ``details`` — свободный текст и не маскируется автоматически
+    (в отличие от известных ключей структурированного лога, см.
+    ``logging_setup._redact_pii_processor``). В нём нельзя указывать ФИО,
+    телефон и другие персональные данные — только vk_id, статусы, суммы
+    и т.п.
     """
     await uow.action_log.add(
         ActionLogEntry(actor_vk_id=actor_vk_id, action=action, details=details)

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from vkbottle import API, Bot
 
+from avrora_bot.adapters.database.crypto import PiiCipher, decode_pii_key
 from avrora_bot.adapters.database.engine import (
     create_engine,
     create_session_factory,
@@ -44,9 +45,12 @@ def build_container(settings: Settings) -> Container:
     """Создаёт все компоненты приложения из настроек."""
     engine = create_engine(settings.database_dsn)
     session_factory = create_session_factory(engine)
+    cipher = PiiCipher(
+        decode_pii_key(settings.pii_encryption_key.get_secret_value())
+    )
 
     def uow_factory() -> UnitOfWork:
-        return SqlAlchemyUnitOfWork(session_factory)
+        return SqlAlchemyUnitOfWork(session_factory, cipher)
 
     # Единый VK API-клиент для бота и шлюза проверки прав.
     api = API(settings.vk_token.get_secret_value())

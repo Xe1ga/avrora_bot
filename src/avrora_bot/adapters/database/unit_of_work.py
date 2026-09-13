@@ -6,6 +6,7 @@ from types import TracebackType
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from avrora_bot.adapters.database.crypto import PiiCipher
 from avrora_bot.adapters.database.repositories import (
     SqlActionLogRepository,
     SqlCalendarRepository,
@@ -29,16 +30,19 @@ class SqlAlchemyUnitOfWork:
     """
 
     def __init__(
-        self, session_factory: async_sessionmaker[AsyncSession]
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        cipher: PiiCipher,
     ) -> None:
         self._session_factory = session_factory
+        self._cipher = cipher
         self._session: AsyncSession | None = None
 
     async def __aenter__(self) -> SqlAlchemyUnitOfWork:
         self._session = self._session_factory()
         s = self._session
-        self.users = SqlUserRepository(s)
-        self.roles = SqlRoleRepository(s)
+        self.users = SqlUserRepository(s, self._cipher)
+        self.roles = SqlRoleRepository(s, self._cipher)
         self.tariffs = SqlTariffRepository(s)
         self.schedule = SqlScheduleRepository(s)
         self.subscriptions = SqlSubscriptionRepository(s)
