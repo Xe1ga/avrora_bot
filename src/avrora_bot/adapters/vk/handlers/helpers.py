@@ -78,3 +78,21 @@ def parse_amount(raw: str) -> Decimal:
         return Decimal(raw.strip().replace(',', '.'))
     except InvalidOperation as exc:
         raise ValidationError('Сумма должна быть числом') from exc
+
+
+def parse_optional(raw: str) -> str | None:
+    """Пустая строка/«-» → ``None``, иначе — обрезанный текст как есть."""
+    stripped = raw.strip()
+    return None if stripped in ('', '-') else stripped
+
+
+def parse_optional_birthdate(raw: str) -> date | None:
+    """Как ``parse_birthdate``, но пустая строка/«-» очищают значение."""
+    value = parse_optional(raw)
+    return None if value is None else parse_birthdate(value)
+
+
+def parse_optional_height(raw: str) -> int | None:
+    """Как ``parse_height``, но пустая строка/«-» очищают значение."""
+    value = parse_optional(raw)
+    return None if value is None else parse_height(value)

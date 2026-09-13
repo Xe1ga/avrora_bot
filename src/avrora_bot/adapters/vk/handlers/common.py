@@ -30,16 +30,22 @@ _EVENT_LABELS = {
 def register(bot: Bot, ctx: BotContext) -> None:
     """Регистрирует общие хендлеры."""
 
+    async def _main_menu(vk_id: int) -> str:
+        roles = await ctx.user_management.effective_roles(vk_id)
+        return keyboards.main_menu(roles=roles)
+
     @bot.on.message(payload={'cmd': 'help'})
     @bot.on.message(text=['помощь', 'help', '/help'])
     async def help_handler(message: Message) -> None:
-        await message.answer(_HELP_TEXT, keyboard=keyboards.main_menu())
+        await message.answer(
+            _HELP_TEXT, keyboard=await _main_menu(message.from_id)
+        )
 
     @bot.on.message(text=['начать', 'start', '/start'])
     async def start_handler(message: Message) -> None:
         await message.answer(
             'Привет! Это бот клуба «Аврора».',
-            keyboard=keyboards.main_menu(),
+            keyboard=await _main_menu(message.from_id),
         )
 
     @bot.on.message(payload={'cmd': 'status'})

@@ -9,6 +9,9 @@ from avrora_bot.application.use_cases.reports import ReportUseCases
 from avrora_bot.application.use_cases.roles import RoleUseCases
 from avrora_bot.application.use_cases.subscriptions import SubscriptionUseCases
 from avrora_bot.application.use_cases.tariffs import TariffUseCases
+from avrora_bot.application.use_cases.user_management import (
+    UserManagementUseCases,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,3 +25,4 @@ class BotContext:
     one_time: OneTimeUseCases
     calendar: CalendarUseCases
     reports: ReportUseCases
+    user_management: UserManagementUseCases

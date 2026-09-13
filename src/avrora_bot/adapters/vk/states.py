@@ -10,3 +10,20 @@ class RegistrationState(BaseStateGroup):
     BIRTHDATE = 'birthdate'
     HEIGHT = 'height'
     PHONE = 'phone'
+
+
+class UserEditState(BaseStateGroup):
+    """Редактирование данных пользователя администратором.
+
+    Значения состояний используют собственный префикс ``user_edit:``, чтобы
+    не совпадать с состояниями ``RegistrationState`` — обе группы могут быть
+    активны одновременно (у разных пользователей), а ``BuiltinStateDispenser``
+    сравнивает состояния как обычные строки.
+    """
+
+    SELECT_USER = 'user_edit:select_user'
+    SELECT_FIELD = 'user_edit:select_field'
+    FULL_NAME = 'user_edit:full_name'
+    BIRTHDATE = 'user_edit:birthdate'
+    HEIGHT = 'user_edit:height'
+    PHONE = 'user_edit:phone'

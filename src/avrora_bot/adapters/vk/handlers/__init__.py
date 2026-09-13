@@ -14,6 +14,7 @@ from avrora_bot.adapters.vk.handlers import (
     registration,
     reports,
     subscriptions,
+    user_edit,
 )
 
 
@@ -29,6 +30,7 @@ def register_handlers(
     общих, а FSM-хендлеры регистрации — до широких текстовых правил.
     """
     registration.register(bot, ctx)
+    user_edit.register(bot, ctx)
     admin.register(bot, ctx)
     subscriptions.register(bot, ctx)
     one_time.register(bot, ctx)

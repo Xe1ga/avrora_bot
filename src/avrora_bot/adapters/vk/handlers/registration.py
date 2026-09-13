@@ -26,12 +26,20 @@ def register(bot: Bot, ctx: BotContext) -> None:
             state if isinstance(state, str) else getattr(state, 'state', None)
         )
 
+    async def _main_menu(vk_id: int) -> str:
+        roles = await ctx.user_management.effective_roles(vk_id)
+        return keyboards.main_menu(roles=roles)
+
     @bot.on.message(payload={'cmd': 'cancel'})
     async def cancel_handler(message: Message) -> None:
+        # Общий отменитель для любого активного FSM (регистрация,
+        # редактирование пользователя и т. п.) — состояние проверяется как
+        # обычная строка, без привязки к конкретной группе состояний.
         if await _current_state(message.peer_id) is not None:
             await dispenser.delete(message.peer_id)
             await message.answer(
-                'Регистрация отменена.', keyboard=keyboards.main_menu()
+                'Действие отменено.',
+                keyboard=await _main_menu(message.from_id),
             )
 
     @bot.on.message(payload={'cmd': 'register'})
@@ -109,9 +117,11 @@ def register(bot: Bot, ctx: BotContext) -> None:
                 )
             )
         except DomainError as exc:
-            await message.answer(f'⚠️ {exc}', keyboard=keyboards.main_menu())
+            await message.answer(
+                f'⚠️ {exc}', keyboard=await _main_menu(message.from_id)
+            )
             return
         await message.answer(
             'Заявка отправлена! Ожидайте подтверждения администратором.',
-            keyboard=keyboards.main_menu(),
+            keyboard=await _main_menu(message.from_id),
         )

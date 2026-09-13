@@ -25,6 +25,9 @@ from avrora_bot.application.use_cases.reports import ReportUseCases
 from avrora_bot.application.use_cases.roles import RoleUseCases
 from avrora_bot.application.use_cases.subscriptions import SubscriptionUseCases
 from avrora_bot.application.use_cases.tariffs import TariffUseCases
+from avrora_bot.application.use_cases.user_management import (
+    UserManagementUseCases,
+)
 from avrora_bot.config import Settings
 from avrora_bot.domain.ports.uow import UnitOfWork
 
@@ -66,6 +69,7 @@ def build_container(settings: Settings) -> Container:
         one_time=OneTimeUseCases(uow_factory, gateway),
         calendar=CalendarUseCases(uow_factory, gateway),
         reports=ReportUseCases(uow_factory, subscriptions),
+        user_management=UserManagementUseCases(uow_factory, gateway),
     )
 
     report_dir = Path('/tmp/avrora_reports')

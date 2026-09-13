@@ -29,6 +29,22 @@ async def has_role(uow: UnitOfWork, vk_id: int, role: RoleName) -> bool:
     return bool(user and user.has_role(role))
 
 
+async def effective_roles(
+    uow: UnitOfWork, vk_gateway: VkGateway, vk_id: int
+) -> frozenset[RoleName]:
+    """Возвращает полный набор ролей пользователя для построения UI.
+
+    Объединяет роли, назначенные в БД, с ролью ``admin``, если пользователь —
+    администратор сообщества VK (см. ``is_admin``): у такого администратора
+    роль ``admin`` может отсутствовать в БД, но право есть.
+    """
+    user = await uow.users.get_by_vk_id(vk_id)
+    roles = set(user.roles) if user else set()
+    if await vk_gateway.is_group_admin(vk_id):
+        roles.add(RoleName.ADMIN)
+    return frozenset(roles)
+
+
 async def require_admin(
     uow: UnitOfWork, vk_gateway: VkGateway, vk_id: int
 ) -> None:
