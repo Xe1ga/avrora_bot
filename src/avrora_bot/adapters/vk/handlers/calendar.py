@@ -8,9 +8,18 @@ from vkbottle.bot import Message
 
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.handlers import helpers
+from avrora_bot.application.services.permissions import has_access
 from avrora_bot.application.use_cases.calendar import EventData
-from avrora_bot.domain.enums import EventType
+from avrora_bot.domain.enums import EventType, RoleName
 from avrora_bot.domain.errors import DomainError, ValidationError
+
+_CALENDAR_HELP_TEXT = (
+    '🗓 Управление календарём:\n\n'
+    '• «событие <дата> <тип> <время> <место>» — добавить событие\n'
+    '  Тип: тренировка/игра. Время ЧЧ:ММ или «-», если не задано.\n'
+    '  Пример: событие 15.09.2026 тренировка 19:00 Зал №1\n'
+    '• «удалить событие <id>» — удалить событие'
+)
 
 _EVENT_TYPE_ALIASES = {
     'тренировка': EventType.TRAINING,
@@ -52,6 +61,14 @@ def register(bot: Bot, ctx: BotContext) -> None:
             await message.answer(f'⚠️ {exc}')
             return
         await message.answer(f'Событие id {event_id} удалено.')
+
+    @bot.on.message(payload={'cmd': 'calendar_help'})
+    async def calendar_help(message: Message) -> None:
+        roles = await ctx.user_management.effective_roles(message.from_id)
+        if not has_access(roles, RoleName.CURATOR):
+            await message.answer('⚠️ Команда доступна только куратору.')
+            return
+        await message.answer(_CALENDAR_HELP_TEXT)
 
 
 def _build_event(day: str, etype: str, etime: str, place: str) -> EventData:

@@ -7,8 +7,18 @@ from vkbottle.bot import Message
 
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.handlers import helpers
-from avrora_bot.domain.enums import TariffKind
+from avrora_bot.application.services.permissions import has_access
+from avrora_bot.domain.enums import RoleName, TariffKind
 from avrora_bot.domain.errors import DomainError
+
+_ONE_TIME_HELP_TEXT = (
+    '🎫 Разовые посещения:\n\n'
+    '• «разовый тариф <сумма>» — изменить тариф разового посещения\n'
+    '• «разовое <vk_id> [дата]» — зарегистрировать посещение\n'
+    '  Дата ДД.ММ.ГГГГ, по умолчанию — сегодня\n'
+    '• «разовые <период>» — список посещений за месяц\n'
+    '• «разовое оплатил <id>» — отметить оплату посещения'
+)
 
 
 def register(bot: Bot, ctx: BotContext) -> None:
@@ -73,6 +83,14 @@ def register(bot: Bot, ctx: BotContext) -> None:
             await message.answer(f'⚠️ {exc}')
             return
         await message.answer(f'Разовое посещение id {visit_id}: оплачено ✅.')
+
+    @bot.on.message(payload={'cmd': 'one_time_help'})
+    async def one_time_help(message: Message) -> None:
+        roles = await ctx.user_management.effective_roles(message.from_id)
+        if not has_access(roles, RoleName.COLLECTOR):
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
+            return
+        await message.answer(_ONE_TIME_HELP_TEXT)
 
 
 async def _register_visit(

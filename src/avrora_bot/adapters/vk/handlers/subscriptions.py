@@ -5,7 +5,20 @@ from vkbottle.bot import Message
 
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.handlers import helpers
+from avrora_bot.application.services.permissions import has_access
+from avrora_bot.domain.enums import RoleName
 from avrora_bot.domain.errors import DomainError, ValidationError
+
+_SUBSCRIPTIONS_HELP_TEXT = (
+    '💰 Команды по абонементам:\n\n'
+    '• «расчёт <период> <число голосов>» — расчёт суммы на человека\n'
+    '  Пример: расчёт 2026-09 12\n'
+    '• «голоса <период>» — зафиксировать голосование; список vk_id '
+    'указывается на следующих строках\n'
+    '• «сумма <период> <сумма>» — изменить сумму на человека\n'
+    '• «оплатил <период> <vk_id>» / «не оплатил <период> <vk_id>» — '
+    'отметить оплату'
+)
 
 
 def register(bot: Bot, ctx: BotContext) -> None:
@@ -84,6 +97,14 @@ def register(bot: Bot, ctx: BotContext) -> None:
     @bot.on.message(text=['не оплатил <period> <vk_id:int>'])
     async def mark_unpaid(message: Message, period: str, vk_id: int) -> None:
         await _mark(ctx, message, period, vk_id, paid=False)
+
+    @bot.on.message(payload={'cmd': 'subscriptions_help'})
+    async def subscriptions_help(message: Message) -> None:
+        roles = await ctx.user_management.effective_roles(message.from_id)
+        if not has_access(roles, RoleName.COLLECTOR):
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
+            return
+        await message.answer(_SUBSCRIPTIONS_HELP_TEXT)
 
 
 async def _mark(

@@ -9,7 +9,15 @@ from avrora_bot.adapters.reports.xlsx import build_month_report
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.gateway import VkbottleGateway
 from avrora_bot.adapters.vk.handlers import helpers
+from avrora_bot.application.services.permissions import has_access
+from avrora_bot.domain.enums import RoleName
 from avrora_bot.domain.errors import DomainError
+
+_REPORTS_HELP_TEXT = (
+    '📊 Отчёты за месяц:\n\n'
+    '• «сводка <период>» / «отчёт <период>» — краткая сводка в чат\n'
+    '• «xlsx <период>» / «файл <период>» — полный отчёт файлом'
+)
 
 
 def register(
@@ -48,3 +56,11 @@ def register(
             file_path=str(out_path),
             message=f'Отчёт за {month.label()}',
         )
+
+    @bot.on.message(payload={'cmd': 'reports_help'})
+    async def reports_help(message: Message) -> None:
+        roles = await ctx.user_management.effective_roles(message.from_id)
+        if not has_access(roles, RoleName.COLLECTOR):
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
+            return
+        await message.answer(_REPORTS_HELP_TEXT)

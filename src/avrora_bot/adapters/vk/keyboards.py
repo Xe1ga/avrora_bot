@@ -2,18 +2,24 @@
 
 from vkbottle import Keyboard, KeyboardButtonColor, Text
 
+from avrora_bot.application.services.permissions import has_access
 from avrora_bot.domain.enums import RoleName
 
 
 def main_menu(roles: frozenset[RoleName] = frozenset()) -> str:
     """Главное меню (стартовая клавиатура).
 
-    Набор кнопок зависит от ролей пользователя (``roles``) — так пункты для
-    новых ролей добавляются веткой ``if <роль> in roles``, без изменения
-    сигнатуры. Видимость кнопки — лишь UI-удобство: доступ всё равно
-    проверяется в хендлере/use case'е, скрытая кнопка лишь убирает её из
-    интерфейса тех, у кого нет соответствующей роли.
+    Набор кнопок зависит от ролей пользователя (``roles``, см.
+    ``permissions.effective_roles``) — администратору видны разделы всех
+    ролей (ТЗ 2: «Полный доступ ко всем функциям бота»), остальным — только
+    свой раздел. Видимость кнопки — лишь UI-удобство: доступ всё равно
+    проверяется в хендлере/use case'е при каждом действии, скрытая кнопка
+    лишь убирает пункт из интерфейса тех, у кого нет нужной роли.
     """
+    is_admin = has_access(roles, RoleName.ADMIN)
+    is_collector = has_access(roles, RoleName.COLLECTOR)
+    is_curator = has_access(roles, RoleName.CURATOR)
+
     kb = (
         Keyboard(one_time=False)
         .add(Text('📅 Календарь', payload={'cmd': 'calendar'}))
@@ -23,11 +29,42 @@ def main_menu(roles: frozenset[RoleName] = frozenset()) -> str:
         .row()
         .add(Text('ℹ️ Помощь', payload={'cmd': 'help'}))
     )
-    if RoleName.ADMIN in roles:
+    if is_admin:
+        kb = (
+            kb.row()
+            .add(Text('📋 Заявки', payload={'cmd': 'requests'}))
+            .add(
+                Text(
+                    '🛠 Роли и добавление',
+                    payload={'cmd': 'admin_help'},
+                )
+            )
+            .row()
+            .add(
+                Text(
+                    '✏️ Редактировать пользователя',
+                    payload={'cmd': 'edit_user'},
+                )
+            )
+        )
+    if is_collector:
+        kb = (
+            kb.row()
+            .add(
+                Text(
+                    '💰 Абонементы',
+                    payload={'cmd': 'subscriptions_help'},
+                )
+            )
+            .add(Text('🎫 Разовые', payload={'cmd': 'one_time_help'}))
+            .row()
+            .add(Text('📊 Отчёты', payload={'cmd': 'reports_help'}))
+        )
+    if is_curator:
         kb = kb.row().add(
             Text(
-                '✏️ Редактировать пользователя',
-                payload={'cmd': 'edit_user'},
+                '🗓 Календарь: команды',
+                payload={'cmd': 'calendar_help'},
             )
         )
     return kb.get_json()

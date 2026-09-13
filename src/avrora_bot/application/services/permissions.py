@@ -29,6 +29,17 @@ async def has_role(uow: UnitOfWork, vk_id: int, role: RoleName) -> bool:
     return bool(user and user.has_role(role))
 
 
+def has_access(roles: frozenset[RoleName], role: RoleName) -> bool:
+    """Проверяет доступ к ролевому разделу UI по уже вычисленным ролям.
+
+    Администратор имеет доступ ко всем ролевым разделам (ТЗ 2: «Полный
+    доступ ко всем функциям бота»), даже если явной роли ``admin`` нет
+    среди ``roles`` (см. ``effective_roles``, которая уже её туда
+    добавляет для администраторов сообщества VK).
+    """
+    return RoleName.ADMIN in roles or role in roles
+
+
 async def effective_roles(
     uow: UnitOfWork, vk_gateway: VkGateway, vk_id: int
 ) -> frozenset[RoleName]:
