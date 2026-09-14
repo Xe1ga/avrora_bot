@@ -27,6 +27,7 @@ def register_handlers(
     privacy_policy_url: str,
     pdn_consent_url: str,
     pdn_consent_version: str,
+    schedule_url: str,
 ) -> None:
     """Подключает все хендлеры к боту.
 
@@ -46,4 +47,4 @@ def register_handlers(
     one_time.register(bot, ctx)
     calendar.register(bot, ctx)
     reports.register(bot, ctx, gateway, report_dir)
-    common.register(bot, ctx)
+    common.register(bot, ctx, schedule_url=schedule_url)

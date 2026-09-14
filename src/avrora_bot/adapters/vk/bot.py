@@ -20,6 +20,7 @@ def build_bot(
     privacy_policy_url: str,
     pdn_consent_url: str,
     pdn_consent_version: str,
+    schedule_url: str,
 ) -> Bot:
     """Создаёт и настраивает бота: middleware и хендлеры.
 
@@ -29,6 +30,8 @@ def build_bot(
     :param pdn_consent_url: ссылка на страницу согласия на обработку ПД.
     :param pdn_consent_version: версия документа согласия (фиксируется
         вместе с фактом согласия в БД).
+    :param schedule_url: ссылка на docs/legal/schedule.html — публикуется
+        в конце сообщения «Календарь».
     """
     bot = Bot(api=api, state_dispenser=BuiltinStateDispenser())
 
@@ -45,5 +48,6 @@ def build_bot(
         privacy_policy_url=privacy_policy_url,
         pdn_consent_url=pdn_consent_url,
         pdn_consent_version=pdn_consent_version,
+        schedule_url=schedule_url,
     )
     return bot

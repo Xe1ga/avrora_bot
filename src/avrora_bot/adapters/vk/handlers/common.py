@@ -23,11 +23,11 @@ _HELP_TEXT = (
 
 _EVENT_LABELS = {
     EventType.TRAINING: '🏐 Тренировка',
-    EventType.GAME: '🎮 Игра',
+    EventType.GAME: '🏆 Игра',
 }
 
 
-def register(bot: Bot, ctx: BotContext) -> None:
+def register(bot: Bot, ctx: BotContext, *, schedule_url: str) -> None:
     """Регистрирует общие хендлеры."""
 
     async def _main_menu(vk_id: int) -> str:
@@ -57,7 +57,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
     @bot.on.message(text=['календарь'])
     async def calendar_current(message: Message) -> None:
         period = MonthPeriod.from_date(datetime.now(UTC).date())
-        await _show_calendar(ctx, message, period)
+        await _show_calendar(ctx, message, period, schedule_url)
 
     @bot.on.message(text=['календарь <raw>'])
     async def calendar_month(message: Message, raw: str) -> None:
@@ -66,7 +66,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
         except DomainError as exc:
             await message.answer(f'⚠️ {exc}')
             return
-        await _show_calendar(ctx, message, period)
+        await _show_calendar(ctx, message, period, schedule_url)
 
 
 _STATUS_LABELS = {
@@ -93,12 +93,15 @@ async def _show_status(ctx: BotContext, message: Message) -> None:
 
 
 async def _show_calendar(
-    ctx: BotContext, message: Message, period: MonthPeriod
+    ctx: BotContext, message: Message, period: MonthPeriod, schedule_url: str
 ) -> None:
     """Отправляет список событий календаря за месяц (доступно всем)."""
     events = await ctx.calendar.list_month(period)
+    keyboard = keyboards.schedule_link(schedule_url)
     if not events:
-        await message.answer(f'На {period.label()} событий нет.')
+        await message.answer(
+            f'На {period.label()} событий нет.', keyboard=keyboard
+        )
         return
     lines = [f'📅 Календарь на {period.label()}:', '']
     for ev in events:
@@ -108,4 +111,4 @@ async def _show_calendar(
             when += ev.event_time.strftime(' %H:%M')
         place = f' — {ev.place}' if ev.place else ''
         lines.append(f'{when} {label}{place}')
-    await message.answer('\n'.join(lines))
+    await message.answer('\n'.join(lines), keyboard=keyboard)

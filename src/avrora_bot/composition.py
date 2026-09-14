@@ -82,6 +82,7 @@ def build_container(settings: Settings) -> Container:
         privacy_policy_url=settings.privacy_policy_url,
         pdn_consent_url=settings.pdn_consent_url,
         pdn_consent_version=settings.pdn_consent_version,
+        schedule_url=settings.schedule_url,
     )
 
     return Container(

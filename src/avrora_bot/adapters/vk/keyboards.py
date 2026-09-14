@@ -96,6 +96,18 @@ def consent(privacy_policy_url: str, pdn_consent_url: str) -> str:
     return kb.get_json()
 
 
+def schedule_link(url: str) -> str:
+    """Инлайн-кнопка со ссылкой на HTML-страницу расписания.
+
+    ВК не поддерживает произвольный текст ссылки внутри тела сообщения
+    (синтаксис ``[url|текст]`` работает только для внутренних сущностей —
+    id/club/doc, не для внешних доменов), поэтому вместо «голого» URL в
+    тексте — отдельная кнопка-ссылка под сообщением.
+    """
+    kb = Keyboard(inline=True).add(OpenLink(url, '🌐 Расписание на сайте'))
+    return kb.get_json()
+
+
 def cancel() -> str:
     """Клавиатура с единственной кнопкой отмены."""
     kb = Keyboard(one_time=True).add(

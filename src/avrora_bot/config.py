@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     #   python -c "import secrets,base64;print(base64.b64encode(secrets.token_bytes(32)).decode())"
     pii_encryption_key: SecretStr
 
+    # --- Расписание (ТЗ 3.7) ---
+    # Ссылка на docs/legal/schedule.html — публикуется в конце сообщения
+    # «Календарь» (см. common.py), генерируется/обновляется вручную
+    # (scripts/build_schedule_page.py), не самим ботом.
+    schedule_url: str
+
     # --- Bootstrap первого администратора ---
     # vk_id пользователя, которому при старте назначается роль admin,
     # чтобы было кому управлять ролями остальных.
