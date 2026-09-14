@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Расписание — Аврора</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent: #4a76a8;
+      --accent-hover: #3d6390;
+      --game: #a12868;
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --text: #1a1a1a;
+      --muted: #6b6b6b;
+      --border: #e0e3e8;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+    }
+
+    /* ── Шапка ────────────────────────────────────────────────────────── */
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 8px 0 20px;
+    }
+
+    .header .emblem {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-size: 21px;
+      font-weight: 700;
+    }
+
+    .header .subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* ── Фото команды ─────────────────────────────────────────────────── */
+
+    .hero {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    .hero img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* ── Фильтры ──────────────────────────────────────────────────────── */
+
+    .filters {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 20px;
+      position: sticky;
+      top: 12px;
+      z-index: 10;
+    }
+
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .filter-row + .filter-row {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .tab {
+      font: inherit;
+      font-size: 14px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .tab:hover { border-color: var(--accent); }
+
+    .tab[aria-pressed="true"] {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .field select,
+    .field input[type="date"] {
+      font: inherit;
+      font-size: 14px;
+      color: var(--text);
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .btn-reset {
+      font: inherit;
+      font-size: 13px;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 6px 0;
+      margin-left: auto;
+    }
+
+    .btn-reset:hover { color: var(--accent-hover); }
+
+    /* ── Список событий ───────────────────────────────────────────────── */
+
+    .day-group + .day-group { margin-top: 18px; }
+
+    .day-heading {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 8px;
+      padding-left: 2px;
+    }
+
+    .day-heading.is-today { color: var(--accent); }
+
+    .event {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+
+    .event + .event { margin-top: 8px; }
+
+    .event.is-past { opacity: 0.5; }
+
+    .event-time {
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      min-width: 92px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      padding: 3px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .badge.training { background: var(--accent); }
+    .badge.game { background: var(--game); }
+
+    .event-details {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .event-place {
+      font-size: 13px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .event-comment {
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      padding: 40px 16px;
+      background: var(--card);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+    }
+
+    /* ── Подвал ───────────────────────────────────────────────────────── */
+
+    .legend {
+      margin-top: 24px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .footer {
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 600px) {
+      .container { padding: 16px 14px 48px; }
+      .header .emblem { width: 44px; height: 44px; }
+      .header h1 { font-size: 18px; }
+      .event { flex-wrap: wrap; }
+      .btn-reset { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img class="emblem" src="assets/emblem.png" alt="Эмблема ВК «Аврора»">
+      <div>
+        <h1>Расписание — «Аврора»</h1>
+        <div class="subtitle">Тренировки и игры · сентябрь–октябрь 2026</div>
+      </div>
+    </div>
+
+    <div class="hero">
+      <img src="assets/team.jpg" alt="Команда «Аврора»" loading="lazy">
+    </div>
+
+    <div class="filters">
+      <div class="filter-row" id="monthTabs" role="tablist" aria-label="Месяц">
+        <button class="tab" type="button" data-month="all" aria-pressed="true">Все</button>
+        <button class="tab" type="button" data-month="2026-09" aria-pressed="false">Сентябрь 2026</button>
+        <button class="tab" type="button" data-month="2026-10" aria-pressed="false">Октябрь 2026</button>
+      </div>
+      <div class="filter-row">
+        <label class="field">
+          Тип
+          <select id="typeFilter">
+            <option value="all">Все</option>
+            <option value="training">🏐 Тренировки</option>
+            <option value="game">🏆 Игры</option>
+          </select>
+        </label>
+        <label class="field">
+          С
+          <input type="date" id="dateFrom">
+        </label>
+        <label class="field">
+          По
+          <input type="date" id="dateTo">
+        </label>
+        <button class="btn-reset" id="resetFilters" type="button">Сбросить фильтры</button>
+      </div>
+    </div>
+
+    <div id="events"></div>
+
+    <div class="legend">
+      🏐 — тренировка · 🏆 — игра.<br>
+      Расписание — точный снимок календаря бота на момент генерации
+      страницы (15.09.2026). Изменения вносятся через бота
+      (команда «событие …» / «удалить событие») и появляются здесь после
+      следующего запуска генератора.
+    </div>
+
+    <div class="footer">
+      Обновлено: 15.09.2026 ·
+      <a href="privacy-policy.html">Политика обработки ПД</a> ·
+      <a href="consent.html">Согласие на обработку ПД</a> ·
+      <a href="https://vk.ru/avrora_volley" target="_blank">Группа ВКонтакте</a>
+    </div>
+  </div>
+
+  <script>
+    // Данные — реальные события из calendar_events на момент генерации
+    // страницы (см. scripts/build_schedule_page.py). Файл перезаписывается
+    // целиком при каждом запуске скрипта — редактировать этот блок вручную
+    // бессмысленно.
+    const EVENTS = [
+  {
+    "date": "2026-09-01",
+    "time": "19:00",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-01",
+    "time": "20:30",
+    "type": "training",
+    "place": "15 школа, тренер Крылов Дмитрий",
+    "comment": null
+  },
+  {
+    "date": "2026-09-03",
+    "time": "19:30",
+    "type": "training",
+    "place": "15 школа, тренер Крылов Дмитрий",
+    "comment": null
+  },
+  {
+    "date": "2026-09-04",
+    "time": "19:00",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-08",
+    "time": "19:00",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-08",
+    "time": "20:30",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-10",
+    "time": "19:30",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-11",
+    "time": "19:00",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-15",
+    "time": "19:00",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-15",
+    "time": "20:30",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-17",
+    "time": "19:30",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-22",
+    "time": "19:00",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  },
+  {
+    "date": "2026-09-22",
+    "time": "20:30",
+    "type": "training",
+    "place": "15 школа, тренер Крылов Дмитрий",
+    "comment": null
+  },
+  {
+    "date": "2026-09-24",
+    "time": "19:30",
+    "type": "training",
+    "place": "15 школа, тренер Крылов Дмитрий",
+    "comment": null
+  },
+  {
+    "date": "2026-09-25",
+    "time": "19:00",
+    "type": "training",
+    "place": "15 школа, тренер Волкова Елена",
+    "comment": null
+  }
+];
+
+    const state = { month: 'all', type: 'all', from: '', to: '' };
+
+    const TODAY = new Date().toISOString().slice(0, 10);
+    const LABELS = { training: '🏐 Тренировка', game: '🏆 Игра' };
+    const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+    const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+    function formatDayHeading(iso) {
+      const d = new Date(iso + 'T00:00:00');
+      const weekday = WEEKDAYS[d.getDay()];
+      return `${weekday}, ${d.getDate()} ${MONTHS_GEN[d.getMonth()]}`;
+    }
+
+    function matches(ev) {
+      if (state.month !== 'all' && !ev.date.startsWith(state.month)) return false;
+      if (state.type !== 'all' && ev.type !== state.type) return false;
+      if (state.from && ev.date < state.from) return false;
+      if (state.to && ev.date > state.to) return false;
+      return true;
+    }
+
+    function render() {
+      const container = document.getElementById('events');
+      const filtered = EVENTS.filter(matches);
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state">Событий по заданным условиям не найдено.</div>';
+        return;
+      }
+
+      const byDate = new Map();
+      for (const ev of filtered) {
+        if (!byDate.has(ev.date)) byDate.set(ev.date, []);
+        byDate.get(ev.date).push(ev);
+      }
+
+      let html = '';
+      for (const [date, evs] of byDate) {
+        const isToday = date === TODAY;
+        html += `<div class="day-group">`;
+        html += `<div class="day-heading${isToday ? ' is-today' : ''}">${formatDayHeading(date)}${isToday ? ' · сегодня' : ''}</div>`;
+        for (const ev of evs) {
+          const isPast = date < TODAY;
+          const time = ev.time || 'время не указано';
+          const place = ev.place ? `<div class="event-place">📍 ${escapeHtml(ev.place)}</div>` : '';
+          const comment = ev.comment ? `<div class="event-comment">${escapeHtml(ev.comment)}</div>` : '';
+          html += `
+            <div class="event${isPast ? ' is-past' : ''}">
+              <div class="event-time">${escapeHtml(time)}</div>
+              <span class="badge ${ev.type}">${LABELS[ev.type] || ev.type}</span>
+              <div class="event-details">${place}${comment}</div>
+            </div>`;
+        }
+        html += `</div>`;
+      }
+      container.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    document.getElementById('monthTabs').addEventListener('click', (e) => {
+      const btn = e.target.closest('.tab');
+      if (!btn) return;
+      state.month = btn.dataset.month;
+      document.querySelectorAll('#monthTabs .tab').forEach((t) =>
+        t.setAttribute('aria-pressed', String(t === btn))
+      );
+      render();
+    });
+
+    document.getElementById('typeFilter').addEventListener('change', (e) => {
+      state.type = e.target.value;
+      render();
+    });
+
+    document.getElementById('dateFrom').addEventListener('change', (e) => {
+      state.from = e.target.value;
+      render();
+    });
+
+    document.getElementById('dateTo').addEventListener('change', (e) => {
+      state.to = e.target.value;
+      render();
+    });
+
+    document.getElementById('resetFilters').addEventListener('click', () => {
+      state.month = 'all';
+      state.type = 'all';
+      state.from = '';
+      state.to = '';
+      document.getElementById('typeFilter').value = 'all';
+      document.getElementById('dateFrom').value = '';
+      document.getElementById('dateTo').value = '';
+      document.querySelectorAll('#monthTabs .tab').forEach((t) =>
+        t.setAttribute('aria-pressed', String(t.dataset.month === 'all'))
+      );
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
