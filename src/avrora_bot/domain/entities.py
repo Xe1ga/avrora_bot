@@ -38,6 +38,20 @@ class User:
 
 
 @dataclass(slots=True)
+class ConsentRecord:
+    """Факт согласия пользователя на обработку персональных данных.
+
+    Append-only: одна запись — один факт согласия с конкретной версией
+    документа (см. ``adapters.database.models.UserConsent``).
+    """
+
+    user_id: int
+    version: str
+    given_at: datetime | None = None
+    id: int | None = None
+
+
+@dataclass(slots=True)
 class Tariff:
     """Значение тарифа с датой начала действия (ведётся история)."""
 

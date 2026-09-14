@@ -43,6 +43,7 @@ from avrora_bot.domain.enums import (
 _PLACE_LEN = 256
 _ACTION_LEN = 128
 _ENUM_LEN = 32
+_CONSENT_VERSION_LEN = 32
 
 
 class UserRole(Base):
@@ -149,6 +150,27 @@ class UserHeight(Base):
     height_cm: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     user: Mapped[User] = relationship(back_populates='height_link')
+
+
+class UserConsent(Base):
+    """Факт согласия на обработку персональных данных (ТЗ 3.6, 152-ФЗ).
+
+    Append-only: строки не обновляются и не удаляются — это журнал, а не
+    текущее состояние. Если версия документа согласия меняется и требуется
+    повторное согласие, добавляется новая строка, старые остаются как
+    история (кто, когда, с какой версией согласился).
+    """
+
+    __tablename__ = 'user_consents'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), index=True
+    )
+    version: Mapped[str] = mapped_column(String(_CONSENT_VERSION_LEN))
+    given_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Tariff(Base):

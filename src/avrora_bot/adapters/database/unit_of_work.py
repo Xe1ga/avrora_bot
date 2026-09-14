@@ -10,6 +10,7 @@ from avrora_bot.adapters.database.crypto import PiiCipher
 from avrora_bot.adapters.database.repositories import (
     SqlActionLogRepository,
     SqlCalendarRepository,
+    SqlConsentRepository,
     SqlOneTimeRepository,
     SqlRoleRepository,
     SqlScheduleRepository,
@@ -49,6 +50,7 @@ class SqlAlchemyUnitOfWork:
         self.one_time = SqlOneTimeRepository(s)
         self.calendar = SqlCalendarRepository(s)
         self.action_log = SqlActionLogRepository(s)
+        self.consents = SqlConsentRepository(s)
         return self
 
     async def __aexit__(

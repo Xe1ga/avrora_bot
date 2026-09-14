@@ -1,6 +1,6 @@
 """Клавиатуры бота."""
 
-from vkbottle import Keyboard, KeyboardButtonColor, Text
+from vkbottle import Keyboard, KeyboardButtonColor, OpenLink, Text
 
 from avrora_bot.application.services.permissions import has_access
 from avrora_bot.domain.enums import RoleName
@@ -67,6 +67,32 @@ def main_menu(roles: frozenset[RoleName] = frozenset()) -> str:
                 payload={'cmd': 'calendar_help'},
             )
         )
+    return kb.get_json()
+
+
+def consent(privacy_policy_url: str, pdn_consent_url: str) -> str:
+    """Клавиатура шага согласия на обработку персональных данных.
+
+    Кнопки-ссылки открывают текст документов в браузере (см. docs/legal/);
+    «✅ Я согласен» — единственный способ продолжить регистрацию: согласие
+    должно быть явным действием пользователя, а не подразумеваться самим
+    фактом продолжения диалога (ст. 9 152-ФЗ).
+    """
+    kb = (
+        Keyboard(one_time=False)
+        .add(OpenLink(privacy_policy_url, '📄 Политика обработки ПД'))
+        .row()
+        .add(OpenLink(pdn_consent_url, '📄 Согласие на обработку ПД'))
+        .row()
+        .add(
+            Text('✅ Я согласен', payload={'cmd': 'consent_agree'}),
+            color=KeyboardButtonColor.POSITIVE,
+        )
+        .add(
+            Text('Отмена', payload={'cmd': 'cancel'}),
+            color=KeyboardButtonColor.NEGATIVE,
+        )
+    )
     return kb.get_json()
 
 

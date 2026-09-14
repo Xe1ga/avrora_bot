@@ -121,7 +121,8 @@ def register(bot: Bot, ctx: BotContext) -> None:
         await _show_fields(message, user)
 
     @bot.on.message(
-        payload={'cmd': 'edit_field'}, state=UserEditState.SELECT_FIELD
+        payload_contains={'cmd': 'edit_field'},
+        state=UserEditState.SELECT_FIELD,
     )
     async def select_field(message: Message) -> None:
         field = _payload_field(message)
@@ -170,7 +171,12 @@ def register(bot: Bot, ctx: BotContext) -> None:
 
     @bot.on.message(payload={'cmd': 'edit_done'})
     async def finish_edit(message: Message) -> None:
-        if await _current_state(message.peer_id) != UserEditState.SELECT_FIELD:
+        # Сравниваем через `==`, а не `!=`: `StatePeer.state` — это
+        # `StateRepresentation` (str), у которого переопределён `__eq__`
+        # для сравнения с `BaseStateGroup`, но не `__ne__` — из-за этого
+        # `!=` всегда возвращает True (сравнение как обычных строк) и
+        # проверка ниже отсекала бы все вызовы, включая корректные.
+        if not await _current_state(message.peer_id) == UserEditState.SELECT_FIELD:  # noqa: SIM201
             return
         await dispenser.delete(message.peer_id)
         await message.answer(

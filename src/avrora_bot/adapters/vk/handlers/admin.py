@@ -57,7 +57,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
                 keyboard=keyboards.approve_reject(user.vk_id),
             )
 
-    @bot.on.message(payload={'cmd': 'approve'})
+    @bot.on.message(payload_contains={'cmd': 'approve'})
     async def approve(message: Message) -> None:
         vk_id = _payload_vk_id(message)
         try:
@@ -67,7 +67,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
             return
         await message.answer(f'✅ {user.full_name} подтверждён.')
 
-    @bot.on.message(payload={'cmd': 'reject'})
+    @bot.on.message(payload_contains={'cmd': 'reject'})
     async def reject(message: Message) -> None:
         vk_id = _payload_vk_id(message)
         try:

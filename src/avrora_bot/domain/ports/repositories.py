@@ -10,6 +10,7 @@ from typing import Protocol
 from avrora_bot.domain.entities import (
     ActionLogEntry,
     CalendarEvent,
+    ConsentRecord,
     OneTimePayment,
     ScheduleSlot,
     Subscription,
@@ -35,6 +36,14 @@ class UserRepository(Protocol):
     async def list_by_status(self, status: UserStatus) -> list[User]: ...
 
     async def list_all(self) -> list[User]: ...
+
+
+class ConsentRepository(Protocol):
+    """Журнал согласий на обработку персональных данных (append-only)."""
+
+    async def add(self, record: ConsentRecord) -> ConsentRecord: ...
+
+    async def list_for_user(self, user_id: int) -> list[ConsentRecord]: ...
 
 
 class RoleRepository(Protocol):

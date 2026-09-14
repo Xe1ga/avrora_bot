@@ -23,13 +23,23 @@ def register_handlers(
     ctx: BotContext,
     gateway: VkbottleGateway,
     report_dir: Path,
+    *,
+    privacy_policy_url: str,
+    pdn_consent_url: str,
+    pdn_consent_version: str,
 ) -> None:
     """Подключает все хендлеры к боту.
 
     Порядок важен: специфичные текстовые команды регистрируются раньше
     общих, а FSM-хендлеры регистрации — до широких текстовых правил.
     """
-    registration.register(bot, ctx)
+    registration.register(
+        bot,
+        ctx,
+        privacy_policy_url=privacy_policy_url,
+        pdn_consent_url=pdn_consent_url,
+        pdn_consent_version=pdn_consent_version,
+    )
     user_edit.register(bot, ctx)
     admin.register(bot, ctx)
     subscriptions.register(bot, ctx)

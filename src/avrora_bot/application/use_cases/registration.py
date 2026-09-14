@@ -6,7 +6,7 @@ from datetime import date
 
 from avrora_bot.application.services import permissions
 from avrora_bot.application.services.action_log import record_action
-from avrora_bot.domain.entities import User
+from avrora_bot.domain.entities import ConsentRecord, User
 from avrora_bot.domain.enums import RoleName, UserStatus
 from avrora_bot.domain.errors import AlreadyExistsError, NotFoundError
 from avrora_bot.domain.ports.uow import UnitOfWork
@@ -24,6 +24,11 @@ class RegistrationData:
     birthdate: date | None = None
     height_cm: int | None = None
     phone: str | None = None
+    # Версия документа «Согласие на обработку персональных данных»
+    # (docs/legal/consent.html), с которой согласился пользователь при
+    # самостоятельной регистрации. ``None`` — для ручного добавления
+    # администратором (admin_add_user), где явного согласия в чате нет.
+    consent_version: str | None = None
 
 
 class RegistrationUseCases:
@@ -54,6 +59,12 @@ class RegistrationUseCases:
                     phone=data.phone,
                 )
             )
+            if data.consent_version is not None:
+                await uow.consents.add(
+                    ConsentRecord(
+                        user_id=user.id, version=data.consent_version
+                    )
+                )
             await uow.commit()
             return user
 

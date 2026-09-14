@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Согласие на обработку персональных данных — Аврора</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent: #4a76a8;
+      --accent-hover: #3d6390;
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --text: #1a1a1a;
+      --muted: #6b6b6b;
+      --border: #e0e3e8;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 16px;
+      padding-bottom: 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+
+    .header {
+      text-align: center;
+      padding: 32px 0 20px;
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .header .version {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 32px 28px;
+      margin-top: 20px;
+    }
+
+    .card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 24px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card h2:first-child { margin-top: 0; }
+
+    .card p, .card li {
+      font-size: 15px;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+
+    .card ul {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .card ul li {
+      padding-left: 18px;
+      position: relative;
+    }
+
+    .card ul li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: var(--muted);
+    }
+
+    .card a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .card a:hover { border-color: var(--accent); }
+
+    .card strong { font-weight: 600; }
+
+    .intro {
+      font-size: 15px;
+      color: var(--muted);
+      margin-bottom: 20px;
+      padding: 14px 16px;
+      background: var(--bg);
+      border-radius: 8px;
+      border-left: 3px solid var(--accent);
+    }
+
+    .confirm-text {
+      font-size: 14px;
+      color: var(--muted);
+      padding: 14px 16px;
+      background: #fff8e1;
+      border-radius: 8px;
+      border-left: 3px solid #ffb300;
+      margin-top: 20px;
+    }
+
+    .bottom-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      padding: 16px 20px;
+      z-index: 100;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    }
+
+    .bottom-bar-inner {
+      max-width: 760px;
+      margin: 0 auto;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .btn {
+      flex: 1;
+      max-width: 320px;
+      padding: 14px 20px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      font-family: inherit;
+    }
+
+    .btn:active { transform: scale(0.98); }
+
+    .btn-accept {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-accept:hover { background: var(--accent-hover); }
+
+    .btn-decline {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-decline:hover { background: var(--bg); }
+
+    .result-message {
+      display: none;
+      text-align: center;
+      padding: 24px;
+      border-radius: var(--radius);
+      margin-top: 24px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .result-success {
+      display: block;
+      background: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #c8e6c9;
+    }
+
+    .result-decline {
+      display: block;
+      background: #fbe9e9;
+      color: #c62828;
+      border: 1px solid #ffcdd2;
+    }
+
+    @media (max-width: 600px) {
+      .container { padding: 16px 14px; }
+      .card { padding: 20px 16px; }
+      .btn { font-size: 15px; padding: 12px 16px; }
+      .header h1 { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Согласие на обработку персональных данных и использование изображения</h1>
+      <div class="version">Версия 1.0 от 14 сентября 2026 г.</div>
+    </div>
+
+    <div class="intro">
+      Настоящим я, заполняя данные в форме регистрации в чат-боте группы ВКонтакте «Волейбольная команда Аврора» и нажимая кнопку «Согласен», даю добровольное, информированное и осознанное согласие на обработку моих персональных данных и использование моего изображения в порядке и на условиях, изложенных ниже.
+    </div>
+
+    <div class="card">
+      <h2>1. Оператор персональных данных</h2>
+      <p><strong>Оператор:</strong> [ФИО администратора(ов)], администратор(ы) группы ВКонтакте волейбольная команда «Аврора» (<a href="https://vk.ru/avrora_volley" target="_blank">https://vk.ru/avrora_volley</a>).</p>
+      <p><strong>Адрес:</strong> [г. Вологда, улица, дом, квартира].</p>
+      <p><strong>Контактный email:</strong> [указать email].</p>
+
+      <h2>2. Цели обработки и категории данных</h2>
+
+      <p><strong>2.1. Цель 1 — обработка заявок на участие в соревнованиях.</strong></p>
+      <p>Персональные данные: фамилия, имя, отчество; дата рождения; номер телефона; рост.</p>
+      <p>Назначение: сбор, обработка и направление данных для формирования и подачи заявок на участие в соревнованиях и турнирах по волейболу в Федерацию города Вологды по волейболу, Федерацию Вологодской области по волейболу и иным организаторам соревнований.</p>
+
+      <p><strong>2.2. Цель 2 — публикация фото- и видеоматериалов.</strong></p>
+      <p>Персональные данные: фамилия, имя, отчество; фотографии; видеоматериалы.</p>
+      <p>Назначение: размещение фотографий и видеоматериалов, полученных во время соревнований, игр и тренировок, в группе ВКонтакте волейбольная команда «Аврора» и иных социальных сетях.</p>
+
+      <h2>3. Перечень действий с персональными данными</h2>
+      <p>Согласие даётся на следующие действия: сбор, запись, систематизация, накопление, хранение, уточнение (обновление, изменение), извлечение, использование, передача (распространение, предоставление, доступа), обезличивание, блокирование, удаление, уничтожение.</p>
+      <p>Обработка осуществляется как с использованием средств автоматизации, так и без их использования.</p>
+
+      <h2>4. Передача персональных данных третьим лицам</h2>
+      <p>В рамках Цели 1 (п. 2.1) мои персональные данные (ФИО, дата рождения, рост) передаются следующим организациям:</p>
+      <ul>
+        <li>Федерация города Вологды по волейболу;</li>
+        <li>Федерация Вологодской области по волейболу;</li>
+        <li>иные организаторы соревнований и турниров по волейболу.</li>
+      </ul>
+      <p>Указанные организации являются самостоятельными операторами персональных данных и несут ответственность за обработку в соответствии с законодательством Российской Федерации.</p>
+      <p>Иная передача персональных данных третьим лицам не осуществляется, за исключением случаев, предусмотренных законом.</p>
+
+      <h2>5. Использование изображения</h2>
+      <p>В соответствии со статьёй 152.1 Гражданского кодекса Российской Федерации я даю согласие на использование моего изображения (фотографий и видеоматериалов), полученного во время соревнований, игр и тренировок, путём размещения в группе ВКонтакте волейбольная команда «Аврора» (<a href="https://vk.ru/avrora_volley" target="_blank">https://vk.ru/avrora_volley</a>) и иных социальных сетях.</p>
+
+      <h2>6. Срок действия согласия и хранения данных</h2>
+      <p>6.1. Согласие действует с момента его предоставления до достижения целей обработки.</p>
+      <p>6.2. Персональные данные, обрабатываемые для подачи заявок на соревнования (Цель 1), хранятся в течение 3 (трёх) лет с даты их предоставления, после чего уничтожаются.</p>
+      <p>6.3. Фото- и видеоматериалы (Цель 2) хранятся до отзыва согласия или до прекращения деятельности группы ВКонтакте «Аврора».</p>
+
+      <h2>7. Отзыв согласия</h2>
+      <p>Согласие может быть отозвано в любой момент. Для отзыва необходимо направить сообщение на email [указать email] или в личные сообщения группы ВКонтакте <a href="https://vk.ru/avrora_volley" target="_blank">https://vk.ru/avrora_volley</a> с указанием ФИО и просьбой об отзыве согласия.</p>
+      <p>Оператор прекращает обработку и уничтожает персональные данные в срок, не превышающий 30 (тридцати) дней с даты получения уведомления об отзыве.</p>
+
+      <h2>8. Последствия непредоставления согласия</h2>
+      <p>Предоставление согласия является добровольным.</p>
+      <p>При отказе от согласия по Цели 1 (заявки на соревнования) я не смогу быть заявлен(а) на участие в соревнованиях по волейболу.</p>
+      <p>При отказе от согласия по Цели 2 (фото и видео) мои фото- и видеоматериалы не будут размещаться в социальных сетях.</p>
+
+      <h2>9. Политика обработки персональных данных</h2>
+      <p>С полной <a href="privacy-policy.html">политикой обработки персональных данных</a> можно ознакомиться здесь.</p>
+
+      <div class="confirm-text">
+        Нажимая кнопку «Согласен», я подтверждаю, что прочитал(а) настоящий текст согласия полностью, понимаю его содержание и даю согласие на обработку персональных данных и использование изображения в указанных целях и на указанных условиях.
+      </div>
+    </div>
+
+    <div class="result-message" id="result"></div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="bottom-bar-inner">
+      <button class="btn btn-accept" id="btnAccept">Согласен</button>
+      <button class="btn btn-decline" id="btnDecline">Не согласен</button>
+    </div>
+  </div>
+
+  <script>
+    const CONSENT_VERSION = "1.0";
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get("user_id") || "unknown";
+
+    const result = document.getElementById("result");
+    const btnAccept = document.getElementById("btnAccept");
+    const btnDecline = document.getElementById("btnDecline");
+
+    btnAccept.addEventListener("click", function() {
+      const consentRecord = {
+        user_id: userId,
+        version: CONSENT_VERSION,
+        timestamp: new Date().toISOString(),
+        action: "accepted"
+      };
+
+      // ЗАГЛУШКА — замените на реальный запрос к вашему API:
+      // fetch("https://ваш-домен/api/consent", {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify(consentRecord)
+      // });
+
+      // Временная заглушка для проверки:
+      localStorage.setItem("consent_aurora", JSON.stringify(consentRecord));
+
+      result.textContent = "Согласие принято. Спасибо!";
+      result.className = "result-message result-success";
+      btnAccept.style.display = "none";
+      btnDecline.style.display = "none";
+      result.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    btnDecline.addEventListener("click", function() {
+      const consentRecord = {
+        user_id: userId,
+        version: CONSENT_VERSION,
+        timestamp: new Date().toISOString(),
+        action: "declined"
+      };
+
+      // ЗАГЛУШКА — замените на реальный запрос к вашему API:
+      // fetch("https://ваш-домен/api/consent", {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify(consentRecord)
+      // });
+
+      result.textContent = "Вы не согласились с условиями. Без согласия участие в соревнованиях и размещение фото недоступны.";
+      result.className = "result-message result-decline";
+      btnAccept.style.display = "none";
+      btnDecline.style.display = "none";
+      result.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  </script>
+</body>
+</html>

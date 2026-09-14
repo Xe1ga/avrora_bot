@@ -17,11 +17,18 @@ def build_bot(
     *,
     rate_limit_per_sec: float,
     report_dir: Path,
+    privacy_policy_url: str,
+    pdn_consent_url: str,
+    pdn_consent_version: str,
 ) -> Bot:
     """Создаёт и настраивает бота: middleware и хендлеры.
 
     :param api: общий VK API-клиент (используется и ботом, и шлюзом).
     :param gateway: шлюз VK для проверки прав и отправки документов.
+    :param privacy_policy_url: ссылка на страницу политики обработки ПД.
+    :param pdn_consent_url: ссылка на страницу согласия на обработку ПД.
+    :param pdn_consent_version: версия документа согласия (фиксируется
+        вместе с фактом согласия в БД).
     """
     bot = Bot(api=api, state_dispenser=BuiltinStateDispenser())
 
@@ -30,5 +37,13 @@ def build_bot(
         make_rate_limit_middleware(interval)
     )
 
-    register_handlers(bot, ctx, gateway, report_dir)
+    register_handlers(
+        bot,
+        ctx,
+        gateway,
+        report_dir,
+        privacy_policy_url=privacy_policy_url,
+        pdn_consent_url=pdn_consent_url,
+        pdn_consent_version=pdn_consent_version,
+    )
     return bot

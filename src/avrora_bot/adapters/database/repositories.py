@@ -135,6 +135,15 @@ def _action_to_domain(row: m.ActionLog) -> e.ActionLogEntry:
     )
 
 
+def _consent_to_domain(row: m.UserConsent) -> e.ConsentRecord:
+    return e.ConsentRecord(
+        id=row.id,
+        user_id=row.user_id,
+        version=row.version,
+        given_at=row.given_at,
+    )
+
+
 # ─────────────────────────────── репозитории ───────────────────────────────
 
 
@@ -519,3 +528,24 @@ class SqlActionLogRepository:
             select(m.ActionLog).order_by(m.ActionLog.id.desc()).limit(limit)
         )
         return [_action_to_domain(r) for r in rows]
+
+
+class SqlConsentRepository:
+    """Репозиторий журнала согласий на обработку персональных данных."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, record: e.ConsentRecord) -> e.ConsentRecord:
+        row = m.UserConsent(user_id=record.user_id, version=record.version)
+        self._s.add(row)
+        await self._s.flush()
+        return _consent_to_domain(row)
+
+    async def list_for_user(self, user_id: int) -> list[e.ConsentRecord]:
+        rows = await self._s.scalars(
+            select(m.UserConsent)
+            .where(m.UserConsent.user_id == user_id)
+            .order_by(m.UserConsent.id)
+        )
+        return [_consent_to_domain(r) for r in rows]

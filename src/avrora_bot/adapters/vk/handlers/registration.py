@@ -13,7 +13,14 @@ from avrora_bot.application.use_cases.registration import RegistrationData
 from avrora_bot.domain.errors import DomainError
 
 
-def register(bot: Bot, ctx: BotContext) -> None:
+def register(
+    bot: Bot,
+    ctx: BotContext,
+    *,
+    privacy_policy_url: str,
+    pdn_consent_url: str,
+    pdn_consent_version: str,
+) -> None:
     """Регистрирует хендлеры пошаговой регистрации."""
     dispenser = bot.state_dispenser
 
@@ -51,8 +58,36 @@ def register(bot: Bot, ctx: BotContext) -> None:
                 'Вы уже зарегистрированы или заявка уже подана.'
             )
             return
-        await dispenser.set(message.peer_id, RegistrationState.FULL_NAME)
+        await dispenser.set(message.peer_id, RegistrationState.CONSENT)
+        await message.answer(
+            'Продолжая, вы соглашаетесь с Политикой обработки '
+            'персональных данных и принимаете Согласие на обработку '
+            'персональных данных.\n\n'
+            'Пожалуйста, ознакомьтесь с документами по кнопкам ниже, '
+            'а затем нажмите «✅ Я согласен», чтобы продолжить '
+            'регистрацию.',
+            keyboard=keyboards.consent(privacy_policy_url, pdn_consent_url),
+        )
+
+    @bot.on.message(
+        payload={'cmd': 'consent_agree'}, state=RegistrationState.CONSENT
+    )
+    async def confirm_consent(message: Message) -> None:
+        await dispenser.set(
+            message.peer_id,
+            RegistrationState.FULL_NAME,
+            consent_version=pdn_consent_version,
+        )
         await message.answer('Введите ваши ФИО:', keyboard=keyboards.cancel())
+
+    @bot.on.message(state=RegistrationState.CONSENT)
+    async def remind_consent(message: Message) -> None:
+        # Любой другой текст на этом шаге — не отменяем FSM, а напоминаем,
+        # что продолжить можно только явным нажатием «✅ Я согласен».
+        await message.answer(
+            'Чтобы продолжить регистрацию, ознакомьтесь с документами и '
+            'нажмите «✅ Я согласен» на клавиатуре ниже.'
+        )
 
     @bot.on.message(state=RegistrationState.FULL_NAME)
     async def step_full_name(message: Message) -> None:
@@ -60,10 +95,12 @@ def register(bot: Bot, ctx: BotContext) -> None:
         if len(full_name) < 3:  # noqa: PLR2004
             await message.answer('Слишком короткое имя. Повторите ввод ФИО:')
             return
+        peer = await dispenser.get(message.peer_id)
         await dispenser.set(
             message.peer_id,
             RegistrationState.BIRTHDATE,
             full_name=full_name,
+            consent_version=peer.payload['consent_version'],
         )
         await message.answer('Дата рождения (ДД.ММ.ГГГГ):')
 
@@ -80,6 +117,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
             RegistrationState.HEIGHT,
             full_name=peer.payload['full_name'],
             birthdate=birthdate.isoformat(),
+            consent_version=peer.payload['consent_version'],
         )
         await message.answer('Ваш рост (см):')
 
@@ -97,6 +135,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
             full_name=peer.payload['full_name'],
             birthdate=peer.payload['birthdate'],
             height=height,
+            consent_version=peer.payload['consent_version'],
         )
         await message.answer('Телефон для связи:')
 
@@ -114,6 +153,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
                     birthdate=date.fromisoformat(payload['birthdate']),
                     height_cm=int(payload['height']),
                     phone=phone,
+                    consent_version=payload['consent_version'],
                 )
             )
         except DomainError as exc:

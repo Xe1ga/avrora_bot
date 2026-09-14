@@ -6,6 +6,7 @@ from vkbottle import BaseStateGroup
 class RegistrationState(BaseStateGroup):
     """Пошаговая самостоятельная регистрация игрока."""
 
+    CONSENT = 'consent'
     FULL_NAME = 'full_name'
     BIRTHDATE = 'birthdate'
     HEIGHT = 'height'

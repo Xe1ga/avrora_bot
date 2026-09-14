@@ -79,6 +79,9 @@ def build_container(settings: Settings) -> Container:
         gateway=gateway,
         rate_limit_per_sec=settings.rate_limit_per_sec,
         report_dir=report_dir,
+        privacy_policy_url=settings.privacy_policy_url,
+        pdn_consent_url=settings.pdn_consent_url,
+        pdn_consent_version=settings.pdn_consent_version,
     )
 
     return Container(
