@@ -34,6 +34,10 @@ def build_bot(
         в конце сообщения «Календарь».
     """
     bot = Bot(api=api, state_dispenser=BuiltinStateDispenser())
+    # Текстовые команды (``text=[...]``) регистронезависимы: «Начать»/
+    # «начать», «Start»/«start» и т. п. — одно и то же. Влияет на все
+    # текстовые правила бота разом (штатная настройка vkbottle).
+    bot.labeler.vbml_ignore_case = True
 
     interval = 1.0 / rate_limit_per_sec if rate_limit_per_sec > 0 else 0.0
     bot.labeler.message_view.register_middleware(
