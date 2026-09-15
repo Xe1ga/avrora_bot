@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from avrora_bot.domain.enums import (
     EventType,
+    LegalDocumentKind,
     PaymentStatus,
     RoleName,
     TariffKind,
@@ -38,15 +39,39 @@ class User:
 
 
 @dataclass(slots=True)
+class LegalDocument:
+    """Версия опубликованного юридического документа (``docs/legal/``).
+
+    Одна запись — один текст: версия и дата из заголовка страницы, ссылка
+    на публикацию, sha256 файла и сам HTML на момент фиксации. Записи
+    неизменяемы: правка текста означает новую версию и новую запись, а
+    старые остаются доказательством того, с каким именно текстом
+    соглашались пользователи (см. ``ConsentRecord``).
+    """
+
+    kind: LegalDocumentKind
+    version: str
+    sha256: str
+    content: str
+    effective_date: date | None = None
+    url: str | None = None
+    created_at: datetime | None = None
+    id: int | None = None
+
+
+@dataclass(slots=True)
 class ConsentRecord:
     """Факт согласия пользователя на обработку персональных данных.
 
-    Append-only: одна запись — один факт согласия с конкретной версией
-    документа (см. ``adapters.database.models.UserConsent``).
+    Append-only: одна запись — один факт согласия с конкретными версиями
+    документов. Хранятся не строки-версии, а ссылки на ``LegalDocument``,
+    где лежит полный текст согласия и политики, с которыми пользователь
+    ознакомился (см. ``adapters.database.models.UserConsent``).
     """
 
     user_id: int
-    version: str
+    consent_document_id: int
+    privacy_policy_document_id: int
     given_at: datetime | None = None
     id: int | None = None
 

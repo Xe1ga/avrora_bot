@@ -26,7 +26,6 @@ def register_handlers(
     *,
     privacy_policy_url: str,
     pdn_consent_url: str,
-    pdn_consent_version: str,
     schedule_url: str,
 ) -> None:
     """Подключает все хендлеры к боту.
@@ -39,7 +38,6 @@ def register_handlers(
         ctx,
         privacy_policy_url=privacy_policy_url,
         pdn_consent_url=pdn_consent_url,
-        pdn_consent_version=pdn_consent_version,
     )
     user_edit.register(bot, ctx)
     admin.register(bot, ctx)

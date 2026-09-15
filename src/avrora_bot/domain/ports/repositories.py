@@ -11,6 +11,7 @@ from avrora_bot.domain.entities import (
     ActionLogEntry,
     CalendarEvent,
     ConsentRecord,
+    LegalDocument,
     OneTimePayment,
     ScheduleSlot,
     Subscription,
@@ -18,7 +19,12 @@ from avrora_bot.domain.entities import (
     Tariff,
     User,
 )
-from avrora_bot.domain.enums import RoleName, TariffKind, UserStatus
+from avrora_bot.domain.enums import (
+    LegalDocumentKind,
+    RoleName,
+    TariffKind,
+    UserStatus,
+)
 from avrora_bot.domain.value_objects import MonthPeriod
 
 
@@ -36,6 +42,26 @@ class UserRepository(Protocol):
     async def list_by_status(self, status: UserStatus) -> list[User]: ...
 
     async def list_all(self) -> list[User]: ...
+
+
+class LegalDocumentRepository(Protocol):
+    """Версии юридических документов (append-only)."""
+
+    async def add(self, document: LegalDocument) -> LegalDocument: ...
+
+    async def get(self, document_id: int) -> LegalDocument | None: ...
+
+    async def get_by_version(
+        self, kind: LegalDocumentKind, version: str
+    ) -> LegalDocument | None: ...
+
+    async def current(
+        self, kind: LegalDocumentKind
+    ) -> LegalDocument | None: ...
+
+    async def list_for_kind(
+        self, kind: LegalDocumentKind
+    ) -> list[LegalDocument]: ...
 
 
 class ConsentRepository(Protocol):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Генерирует docs/legal/schedule.html из реальных данных ``calendar_events``.
+"""Генерирует docs/schedule.html из реальных данных ``calendar_events``.
 
 Запуск вручную, когда нужно опубликовать актуальное расписание::
 
@@ -9,7 +9,7 @@
 Без ``--months`` берутся текущий и следующий календарные месяцы (по
 часовому поясу из настроек, ``TZ`` в ``.env``).
 
-Файл ``docs/legal/schedule.html`` полностью перезаписывается при каждом
+Файл ``docs/schedule.html`` полностью перезаписывается при каждом
 запуске — редактировать его руками бессмысленно, следующий запуск сотрёт
 правки. Меняйте данные через бота (команда «событие <дата> <тип> <время>
 <место>» / «удалить событие <id>», см. «🗓 Календарь: команды») и
@@ -55,7 +55,7 @@ from avrora_bot.domain.entities import CalendarEvent  # noqa: E402
 from avrora_bot.domain.errors import ValidationError  # noqa: E402
 from avrora_bot.domain.value_objects import MonthPeriod  # noqa: E402
 
-OUTPUT_PATH = REPO_ROOT / 'docs' / 'legal' / 'schedule.html'
+OUTPUT_PATH = REPO_ROOT / 'docs' / 'schedule.html'
 TEMPLATE_PATH = Path(__file__).resolve().parent / 'schedule_template.html'
 
 _TYPE_LABELS = {'training': '🏐 Тренировка', 'game': '🏆 Игра'}
@@ -66,7 +66,7 @@ _NO_TIME_SORT_KEY = '99:99'
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Парсит аргументы командной строки."""
     parser = argparse.ArgumentParser(
-        description='Генерирует docs/legal/schedule.html из calendar_events.'
+        description='Генерирует docs/schedule.html из calendar_events.'
     )
     parser.add_argument(
         '--months',

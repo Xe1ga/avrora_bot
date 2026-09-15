@@ -6,13 +6,18 @@ from datetime import date
 from avrora_bot.application.services import permissions
 from avrora_bot.application.services.action_log import record_action
 from avrora_bot.domain.entities import User
-from avrora_bot.domain.enums import RoleName
-from avrora_bot.domain.errors import NotFoundError
+from avrora_bot.domain.enums import RoleName, UserStatus
+from avrora_bot.domain.errors import NotFoundError, ValidationError
 from avrora_bot.domain.ports.uow import UnitOfWork
 from avrora_bot.domain.ports.vk_gateway import VkGateway
 
 UowFactory = Callable[[], UnitOfWork]
 _Mutator = Callable[[User], None]
+
+# Замена ФИО при уничтожении персональных данных (152-ФЗ, отзыв согласия).
+# Само шифрованное значение перезаписывается этой строкой — восстановить
+# исходное ФИО из БД после этого невозможно.
+_ANONYMIZED_FULL_NAME = 'Пользователь удалил персональные данные'
 
 
 class UserManagementUseCases:
@@ -85,6 +90,50 @@ class UserManagementUseCases:
             'user.edit_height',
             lambda user: setattr(user, 'height_cm', height_cm),
         )
+
+    async def delete_personal_data(
+        self, admin_vk_id: int, target_vk_id: int
+    ) -> User:
+        """
+        Уничтожает персональные данные пользователя (ТЗ 3.6, 152-ФЗ ст. 21):
+        удовлетворяет отзыву согласия на обработку. ФИО перезаписывается
+        меткой (шифрованное значение необратимо теряется), телефон/дата
+        рождения/рост обнуляются, все роли снимаются, статус — ``deleted``.
+
+        Не трогаются: vk_id (публичен в самом VK, не тайна, которую хранит
+        бот), история оплат/посещений (``subscription_payments``,
+        ``one_time_payments`` — это факты «оплатил/не оплатил», не ФИО) и
+        журнал согласий ``user_consents`` (доказательство правомерности
+        прошлой обработки и самого факта отзыва — нужен оператору для
+        защиты при проверке).
+
+        :raises NotFoundError: если пользователь с таким vk_id не найден.
+        :raises ValidationError: если данные уже были уничтожены ранее.
+        """
+        async with self._uow_factory() as uow:
+            await permissions.require_admin(uow, self._vk, admin_vk_id)
+            user = await self._get_or_raise(uow, target_vk_id)
+            if user.status is UserStatus.DELETED:
+                raise ValidationError(
+                    'Персональные данные этого пользователя уже удалены'
+                )
+            user.full_name = _ANONYMIZED_FULL_NAME
+            user.phone = None
+            user.birthdate = None
+            user.height_cm = None
+            user.status = UserStatus.DELETED
+            await uow.users.update(user)
+            for role in await uow.roles.roles_of(user.id):
+                await uow.roles.revoke(user.id, role)
+            user.roles = set()  # отражаем снятые роли в возвращаемой сущности
+            await record_action(
+                uow,
+                admin_vk_id,
+                'user.delete_personal_data',
+                f'vk_id={target_vk_id}',
+            )
+            await uow.commit()
+            return user
 
     async def _update(
         self,

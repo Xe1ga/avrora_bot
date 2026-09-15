@@ -19,6 +19,7 @@ from avrora_bot.adapters.vk.bot import build_bot
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.gateway import VkbottleGateway
 from avrora_bot.application.use_cases.calendar import CalendarUseCases
+from avrora_bot.application.use_cases.legal import LegalUseCases
 from avrora_bot.application.use_cases.one_time import OneTimeUseCases
 from avrora_bot.application.use_cases.registration import RegistrationUseCases
 from avrora_bot.application.use_cases.reports import ReportUseCases
@@ -63,6 +64,7 @@ def build_container(settings: Settings) -> Container:
     subscriptions = SubscriptionUseCases(uow_factory, gateway)
     ctx = BotContext(
         registration=registration,
+        legal=LegalUseCases(uow_factory),
         roles=RoleUseCases(uow_factory, gateway),
         tariffs=TariffUseCases(uow_factory, gateway),
         subscriptions=subscriptions,
@@ -81,7 +83,6 @@ def build_container(settings: Settings) -> Container:
         report_dir=report_dir,
         privacy_policy_url=settings.privacy_policy_url,
         pdn_consent_url=settings.pdn_consent_url,
-        pdn_consent_version=settings.pdn_consent_version,
         schedule_url=settings.schedule_url,
     )
 

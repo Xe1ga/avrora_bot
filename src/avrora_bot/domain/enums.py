@@ -18,6 +18,13 @@ class UserStatus(StrEnum):
     PENDING = 'pending'  # заявка/добавлен, но не подтверждён
     ACTIVE = 'active'  # подтверждён администратором
     REJECTED = 'rejected'  # заявка отклонена
+    # Персональные данные уничтожены по отзыву согласия (ТЗ 3.6, 152-ФЗ
+    # ст. 21) — см. UserManagementUseCases.delete_personal_data. Строка
+    # users сохраняется (нужна как якорь для FK из user_consents и истории
+    # оплат), vk_id не трогается, ФИО/телефон/ДР/рост уничтожены, роли
+    # сняты. Повторная self_register с тем же vk_id разрешена и переводит
+    # статус обратно в pending.
+    DELETED = 'deleted'
 
 
 class PaymentStatus(StrEnum):
@@ -32,6 +39,13 @@ class EventType(StrEnum):
 
     TRAINING = 'training'  # тренировка
     GAME = 'game'  # игра
+
+
+class LegalDocumentKind(StrEnum):
+    """Вид юридического документа, публикуемого в ``docs/legal/``."""
+
+    CONSENT = 'consent'  # согласие на обработку ПД (consent.html)
+    PRIVACY_POLICY = 'privacy_policy'  # политика ПД (privacy-policy.html)
 
 
 class TariffKind(StrEnum):

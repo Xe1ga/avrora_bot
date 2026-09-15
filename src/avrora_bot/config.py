@@ -7,6 +7,7 @@
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
     pii_encryption_key: SecretStr
 
     # --- Расписание (ТЗ 3.7) ---
-    # Ссылка на docs/legal/schedule.html — публикуется в конце сообщения
+    # Ссылка на docs/schedule.html — публикуется в конце сообщения
     # «Календарь» (см. common.py), генерируется/обновляется вручную
     # (scripts/build_schedule_page.py), не самим ботом.
     schedule_url: str
@@ -60,11 +61,14 @@ class Settings(BaseSettings):
     # регистрация недоступна.
     privacy_policy_url: str
     pdn_consent_url: str
-    # Версия документа docs/legal/consent.html (см. заголовок «Версия X.Y
-    # от ...» на странице) — фиксируется вместе с датой в момент согласия
-    # (см. user_consents), чтобы всегда знать, с каким именно текстом
-    # согласился пользователь. Меняйте при каждой правке текста согласия.
-    pdn_consent_version: str
+    # Каталог с теми же файлами в репозитории. При старте приложение читает
+    # их, берёт номер версии из заголовка страницы («Версия X.Y от ...») и
+    # регистрирует новую версию в таблице legal_documents вместе с полным
+    # текстом. Журнал согласий (user_consents) ссылается на эти строки,
+    # поэтому всегда известно, с каким именно текстом согласился
+    # пользователь. Отдельная переменная с номером версии не нужна:
+    # источник истины — заголовок самого документа.
+    legal_docs_dir: Path = Path('docs/legal')
 
     # --- Прочее ---
     rate_limit_per_sec: float = 1.0

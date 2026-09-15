@@ -19,7 +19,6 @@ def register(
     *,
     privacy_policy_url: str,
     pdn_consent_url: str,
-    pdn_consent_version: str,
 ) -> None:
     """Регистрирует хендлеры пошаговой регистрации."""
     dispenser = bot.state_dispenser
@@ -58,11 +57,27 @@ def register(
                 'Вы уже зарегистрированы или заявка уже подана.'
             )
             return
-        await dispenser.set(message.peer_id, RegistrationState.CONSENT)
+        # Версии документов фиксируются на входе в FSM и переносятся по
+        # шагам: пользователь соглашается именно с теми текстами, которые
+        # ему показали, даже если во время диалога вышла новая редакция.
+        try:
+            documents = await ctx.legal.current_documents()
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await dispenser.set(
+            message.peer_id,
+            RegistrationState.CONSENT,
+            consent_document_id=documents.consent.id,
+            privacy_policy_document_id=documents.privacy_policy.id,
+        )
         await message.answer(
             'Продолжая, вы соглашаетесь с Политикой обработки '
             'персональных данных и принимаете Согласие на обработку '
             'персональных данных.\n\n'
+            f'Действующие редакции: согласие — версия '
+            f'{documents.consent.version}, политика — версия '
+            f'{documents.privacy_policy.version}.\n\n'
             'Пожалуйста, ознакомьтесь с документами по кнопкам ниже, '
             'а затем нажмите «✅ Я согласен», чтобы продолжить '
             'регистрацию.',
@@ -73,10 +88,14 @@ def register(
         payload={'cmd': 'consent_agree'}, state=RegistrationState.CONSENT
     )
     async def confirm_consent(message: Message) -> None:
+        peer = await dispenser.get(message.peer_id)
         await dispenser.set(
             message.peer_id,
             RegistrationState.FULL_NAME,
-            consent_version=pdn_consent_version,
+            consent_document_id=peer.payload['consent_document_id'],
+            privacy_policy_document_id=peer.payload[
+                'privacy_policy_document_id'
+            ],
         )
         await message.answer('Введите ваши ФИО:', keyboard=keyboards.cancel())
 
@@ -100,7 +119,10 @@ def register(
             message.peer_id,
             RegistrationState.BIRTHDATE,
             full_name=full_name,
-            consent_version=peer.payload['consent_version'],
+            consent_document_id=peer.payload['consent_document_id'],
+            privacy_policy_document_id=peer.payload[
+                'privacy_policy_document_id'
+            ],
         )
         await message.answer('Дата рождения (ДД.ММ.ГГГГ):')
 
@@ -117,7 +139,10 @@ def register(
             RegistrationState.HEIGHT,
             full_name=peer.payload['full_name'],
             birthdate=birthdate.isoformat(),
-            consent_version=peer.payload['consent_version'],
+            consent_document_id=peer.payload['consent_document_id'],
+            privacy_policy_document_id=peer.payload[
+                'privacy_policy_document_id'
+            ],
         )
         await message.answer('Ваш рост (см):')
 
@@ -135,7 +160,10 @@ def register(
             full_name=peer.payload['full_name'],
             birthdate=peer.payload['birthdate'],
             height=height,
-            consent_version=peer.payload['consent_version'],
+            consent_document_id=peer.payload['consent_document_id'],
+            privacy_policy_document_id=peer.payload[
+                'privacy_policy_document_id'
+            ],
         )
         await message.answer('Телефон для связи:')
 
@@ -153,7 +181,10 @@ def register(
                     birthdate=date.fromisoformat(payload['birthdate']),
                     height_cm=int(payload['height']),
                     phone=phone,
-                    consent_version=payload['consent_version'],
+                    consent_document_id=payload['consent_document_id'],
+                    privacy_policy_document_id=payload[
+                        'privacy_policy_document_id'
+                    ],
                 )
             )
         except DomainError as exc:

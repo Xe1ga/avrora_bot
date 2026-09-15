@@ -1,15 +1,25 @@
 """Идемпотентный сидинг справочных данных.
 
 Наполняет БД начальными тарифами и недельным расписанием (по данным файла
-«Оплата абонементов.md»), а также при необходимости назначает первого
+«Оплата абонементов.md»), регистрирует актуальные версии юридических
+документов из ``docs/legal/``, а также при необходимости назначает первого
 администратора (bootstrap). Вызывается при старте приложения после миграций.
 """
 
 from datetime import date, time
 from decimal import Decimal
+from pathlib import Path
 
+from avrora_bot.adapters.legal.files import load_document
 from avrora_bot.domain import entities as e
-from avrora_bot.domain.enums import RoleName, TariffKind, UserStatus, Weekday
+from avrora_bot.domain.enums import (
+    LegalDocumentKind,
+    RoleName,
+    TariffKind,
+    UserStatus,
+    Weekday,
+)
+from avrora_bot.domain.errors import ValidationError
 from avrora_bot.domain.ports.uow import UnitOfWork
 from avrora_bot.logging_setup import get_logger
 
@@ -51,6 +61,61 @@ async def seed_reference_data(uow: UnitOfWork) -> None:
                 e.ScheduleSlot(weekday=weekday, start=start, end=end)
             )
         log.info('seed.schedule', slots=len(_DEFAULT_SCHEDULE))
+
+
+async def sync_legal_documents(
+    uow: UnitOfWork,
+    docs_dir: Path,
+    *,
+    urls: dict[LegalDocumentKind, str] | None = None,
+) -> None:
+    """Регистрирует версии документов из ``docs/legal/`` (идемпотентно).
+
+    Для каждого документа читается файл, из заголовка берётся номер версии,
+    и если такой версии в ``legal_documents`` ещё нет — добавляется новая
+    строка с полным текстом и sha256. Уже зарегистрированные версии не
+    трогаются: на них ссылается журнал согласий, текст должен остаться
+    ровно таким, каким его принимали пользователи.
+
+    Если текст файла изменился без подъёма номера версии, расхождение
+    хэшей пишется в лог как предупреждение — в БД остаётся ранее
+    зафиксированный текст, а новую редакцию нужно публиковать с новой
+    версией в заголовке.
+
+    Отсутствие или неразбираемость файла не останавливает приложение:
+    ошибка логируется, а регистрация новых пользователей будет отклонена
+    (см. ``application.use_cases.legal``), пока документы не появятся.
+    """
+    urls = urls or {}
+    for kind in LegalDocumentKind:
+        try:
+            document = load_document(kind, docs_dir, urls.get(kind))
+        except (OSError, ValidationError) as exc:
+            log.error(
+                'seed.legal_document.unavailable',
+                kind=str(kind),
+                dir=str(docs_dir),
+                error=str(exc),
+            )
+            continue
+        existing = await uow.legal_documents.get_by_version(
+            kind, document.version
+        )
+        if existing is None:
+            await uow.legal_documents.add(document)
+            log.info(
+                'seed.legal_document.registered',
+                kind=str(kind),
+                version=document.version,
+            )
+        elif existing.sha256 != document.sha256:
+            log.warning(
+                'seed.legal_document.changed_without_new_version',
+                kind=str(kind),
+                version=document.version,
+                stored_sha256=existing.sha256,
+                file_sha256=document.sha256,
+            )
 
 
 async def ensure_bootstrap_admin(

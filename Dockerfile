@@ -22,6 +22,10 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY src ./src
 COPY alembic.ini entrypoint.sh ./
 
+# Тексты документов о персональных данных: при старте приложение читает их
+# и регистрирует актуальные версии в таблице legal_documents (LEGAL_DOCS_DIR).
+COPY docs/legal ./docs/legal
+
 # Установка самого пакета (после копирования исходников).
 RUN uv sync --frozen --no-dev
 

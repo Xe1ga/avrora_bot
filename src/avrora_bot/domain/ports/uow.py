@@ -12,6 +12,7 @@ from avrora_bot.domain.ports.repositories import (
     ActionLogRepository,
     CalendarRepository,
     ConsentRepository,
+    LegalDocumentRepository,
     OneTimeRepository,
     RoleRepository,
     ScheduleRepository,
@@ -32,6 +33,7 @@ class UnitOfWork(Protocol):
     one_time: OneTimeRepository
     calendar: CalendarRepository
     action_log: ActionLogRepository
+    legal_documents: LegalDocumentRepository
     consents: ConsentRepository
 
     async def __aenter__(self) -> UnitOfWork: ...

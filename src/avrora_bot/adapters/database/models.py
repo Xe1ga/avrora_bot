@@ -32,6 +32,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from avrora_bot.adapters.database.base import Base, TimestampMixin
 from avrora_bot.domain.enums import (
     EventType,
+    LegalDocumentKind,
     PaymentStatus,
     RoleName,
     TariffKind,
@@ -43,7 +44,9 @@ from avrora_bot.domain.enums import (
 _PLACE_LEN = 256
 _ACTION_LEN = 128
 _ENUM_LEN = 32
-_CONSENT_VERSION_LEN = 32
+_DOC_VERSION_LEN = 32
+_URL_LEN = 512
+_SHA256_LEN = 64
 
 
 class UserRole(Base):
@@ -152,13 +155,58 @@ class UserHeight(Base):
     user: Mapped[User] = relationship(back_populates='height_link')
 
 
+class LegalDocument(Base, TimestampMixin):
+    """Версия юридического документа из ``docs/legal/`` (ТЗ 3.6, 152-ФЗ).
+
+    Append-only справочник версий: одна строка — один опубликованный текст
+    (``consent.html`` или ``privacy-policy.html``) с версией и датой из
+    заголовка страницы, ссылкой на публикацию, sha256 файла и полным HTML
+    на момент фиксации. Строки не обновляются и не удаляются: на них
+    ссылается журнал согласий (``UserConsent``), поэтому текст, с которым
+    согласился пользователь, всегда восстановим из БД, даже если файл в
+    репозитории потом переписали.
+
+    Новые версии регистрируются автоматически при старте приложения
+    (``adapters.database.seed.sync_legal_documents``) по файлам из
+    ``docs/legal/``.
+    """
+
+    __tablename__ = 'legal_documents'
+    __table_args__ = (
+        UniqueConstraint('kind', 'version', name='uq_legal_document_version'),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[LegalDocumentKind] = mapped_column(
+        String(_ENUM_LEN), index=True
+    )
+    version: Mapped[str] = mapped_column(String(_DOC_VERSION_LEN))
+    # Дата вступления в силу из заголовка «Версия X.Y от ДД месяца ГГГГ г.».
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Адрес публикации на момент регистрации версии (GitHub Pages и т. п.).
+    url: Mapped[str | None] = mapped_column(String(_URL_LEN), nullable=True)
+    sha256: Mapped[str] = mapped_column(String(_SHA256_LEN))
+    content: Mapped[str] = mapped_column(Text)
+
+    consents_as_consent: Mapped[list[UserConsent]] = relationship(
+        back_populates='consent_document',
+        foreign_keys='UserConsent.consent_document_id',
+    )
+    consents_as_privacy_policy: Mapped[list[UserConsent]] = relationship(
+        back_populates='privacy_policy_document',
+        foreign_keys='UserConsent.privacy_policy_document_id',
+    )
+
+
 class UserConsent(Base):
     """Факт согласия на обработку персональных данных (ТЗ 3.6, 152-ФЗ).
 
     Append-only: строки не обновляются и не удаляются — это журнал, а не
-    текущее состояние. Если версия документа согласия меняется и требуется
-    повторное согласие, добавляется новая строка, старые остаются как
-    история (кто, когда, с какой версией согласился).
+    текущее состояние. Фиксируются ссылки на конкретные версии обоих
+    документов (``legal_documents``), с которыми пользователь ознакомился:
+    согласие на обработку ПД и политика обработки ПД. Если текст меняется и
+    требуется повторное согласие, добавляется новая строка со ссылками на
+    новые версии, старые остаются как история (кто, когда, с чем согласился).
     """
 
     __tablename__ = 'user_consents'
@@ -167,9 +215,23 @@ class UserConsent(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey('users.id', ondelete='CASCADE'), index=True
     )
-    version: Mapped[str] = mapped_column(String(_CONSENT_VERSION_LEN))
+    consent_document_id: Mapped[int] = mapped_column(
+        ForeignKey('legal_documents.id', ondelete='RESTRICT'), index=True
+    )
+    privacy_policy_document_id: Mapped[int] = mapped_column(
+        ForeignKey('legal_documents.id', ondelete='RESTRICT'), index=True
+    )
     given_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    consent_document: Mapped[LegalDocument] = relationship(
+        back_populates='consents_as_consent',
+        foreign_keys=[consent_document_id],
+    )
+    privacy_policy_document: Mapped[LegalDocument] = relationship(
+        back_populates='consents_as_privacy_policy',
+        foreign_keys=[privacy_policy_document_id],
     )
 
 

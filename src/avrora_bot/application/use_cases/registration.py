@@ -24,11 +24,14 @@ class RegistrationData:
     birthdate: date | None = None
     height_cm: int | None = None
     phone: str | None = None
-    # Версия документа «Согласие на обработку персональных данных»
-    # (docs/legal/consent.html), с которой согласился пользователь при
-    # самостоятельной регистрации. ``None`` — для ручного добавления
-    # администратором (admin_add_user), где явного согласия в чате нет.
-    consent_version: str | None = None
+    # Версии документов (строки таблицы legal_documents), с которыми
+    # пользователь ознакомился при самостоятельной регистрации: согласие
+    # на обработку ПД и политика обработки ПД. ``None`` — для ручного
+    # добавления администратором (admin_add_user), где явного согласия в
+    # чате нет. Задаются только вместе: согласие фиксируется сразу по
+    # обоим документам.
+    consent_document_id: int | None = None
+    privacy_policy_document_id: int | None = None
 
 
 class RegistrationUseCases:
@@ -41,28 +44,57 @@ class RegistrationUseCases:
     async def self_register(self, data: RegistrationData) -> User:
         """Создаёт заявку игрока со статусом ``pending``.
 
-        :raises AlreadyExistsError: если профиль с таким vk_id уже есть.
+        Если по этому vk_id ранее уже были уничтожены персональные данные
+        (``UserStatus.DELETED`` — отзыв согласия, см.
+        ``UserManagementUseCases.delete_personal_data``), профиль не
+        считается занятым: строка переиспользуется (тот же ``id``/``vk_id``,
+        чтобы не терять связанную историю оплат и прежний журнал согласий),
+        новые данные и новое согласие записываются поверх, статус — снова
+        ``pending``. Для любого другого статуса (``pending``/``active``/
+        ``rejected``) профиль считается занятым.
+
+        :raises AlreadyExistsError: если профиль с таким vk_id уже есть и
+            его персональные данные не были уничтожены.
         """
         async with self._uow_factory() as uow:
             existing = await uow.users.get_by_vk_id(data.vk_id)
-            if existing is not None:
+            if (
+                existing is not None
+                and existing.status is not UserStatus.DELETED
+            ):
                 raise AlreadyExistsError(
                     'Профиль уже существует или заявка подана'
                 )
-            user = await uow.users.add(
-                User(
-                    vk_id=data.vk_id,
-                    full_name=data.full_name,
-                    status=UserStatus.PENDING,
-                    birthdate=data.birthdate,
-                    height_cm=data.height_cm,
-                    phone=data.phone,
+            if existing is not None:
+                existing.full_name = data.full_name
+                existing.birthdate = data.birthdate
+                existing.height_cm = data.height_cm
+                existing.phone = data.phone
+                existing.status = UserStatus.PENDING
+                await uow.users.update(existing)
+                user = existing
+            else:
+                user = await uow.users.add(
+                    User(
+                        vk_id=data.vk_id,
+                        full_name=data.full_name,
+                        status=UserStatus.PENDING,
+                        birthdate=data.birthdate,
+                        height_cm=data.height_cm,
+                        phone=data.phone,
+                    )
                 )
-            )
-            if data.consent_version is not None:
+            if (
+                data.consent_document_id is not None
+                and data.privacy_policy_document_id is not None
+            ):
                 await uow.consents.add(
                     ConsentRecord(
-                        user_id=user.id, version=data.consent_version
+                        user_id=user.id,
+                        consent_document_id=data.consent_document_id,
+                        privacy_policy_document_id=(
+                            data.privacy_policy_document_id
+                        ),
                     )
                 )
             await uow.commit()

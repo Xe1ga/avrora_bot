@@ -16,6 +16,7 @@ from avrora_bot.adapters.database.crypto import PiiCipher
 from avrora_bot.domain import entities as e
 from avrora_bot.domain.enums import (
     EventType,
+    LegalDocumentKind,
     PaymentStatus,
     RoleName,
     TariffKind,
@@ -139,8 +140,22 @@ def _consent_to_domain(row: m.UserConsent) -> e.ConsentRecord:
     return e.ConsentRecord(
         id=row.id,
         user_id=row.user_id,
-        version=row.version,
+        consent_document_id=row.consent_document_id,
+        privacy_policy_document_id=row.privacy_policy_document_id,
         given_at=row.given_at,
+    )
+
+
+def _legal_document_to_domain(row: m.LegalDocument) -> e.LegalDocument:
+    return e.LegalDocument(
+        id=row.id,
+        kind=LegalDocumentKind(row.kind),
+        version=row.version,
+        sha256=row.sha256,
+        content=row.content,
+        effective_date=row.effective_date,
+        url=row.url,
+        created_at=row.created_at,
     )
 
 
@@ -530,6 +545,66 @@ class SqlActionLogRepository:
         return [_action_to_domain(r) for r in rows]
 
 
+class SqlLegalDocumentRepository:
+    """Репозиторий версий юридических документов (``docs/legal/``)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, document: e.LegalDocument) -> e.LegalDocument:
+        row = m.LegalDocument(
+            kind=document.kind,
+            version=document.version,
+            effective_date=document.effective_date,
+            url=document.url,
+            sha256=document.sha256,
+            content=document.content,
+        )
+        self._s.add(row)
+        await self._s.flush()
+        return _legal_document_to_domain(row)
+
+    async def get(self, document_id: int) -> e.LegalDocument | None:
+        row = await self._s.get(m.LegalDocument, document_id)
+        return _legal_document_to_domain(row) if row else None
+
+    async def get_by_version(
+        self, kind: LegalDocumentKind, version: str
+    ) -> e.LegalDocument | None:
+        row = await self._s.scalar(
+            select(m.LegalDocument).where(
+                m.LegalDocument.kind == kind,
+                m.LegalDocument.version == version,
+            )
+        )
+        return _legal_document_to_domain(row) if row else None
+
+    async def current(self, kind: LegalDocumentKind) -> e.LegalDocument | None:
+        """Возвращает последнюю зарегистрированную версию документа.
+
+        Актуальной считается позднее всех добавленная строка: версии
+        регистрируются по мере публикации новых текстов, поэтому порядок
+        добавления и есть хронология версий.
+        """
+        row = await self._s.scalar(
+            select(m.LegalDocument)
+            .where(m.LegalDocument.kind == kind)
+            .order_by(m.LegalDocument.id.desc())
+            .limit(1)
+        )
+        return _legal_document_to_domain(row) if row else None
+
+    async def list_for_kind(
+        self, kind: LegalDocumentKind
+    ) -> list[e.LegalDocument]:
+        rows = await self._s.scalars(
+            select(m.LegalDocument)
+            .where(m.LegalDocument.kind == kind)
+            .order_by(m.LegalDocument.id)
+        )
+        return [_legal_document_to_domain(r) for r in rows]
+
+
 class SqlConsentRepository:
     """Репозиторий журнала согласий на обработку персональных данных."""
 
@@ -537,7 +612,11 @@ class SqlConsentRepository:
         self._s = session
 
     async def add(self, record: e.ConsentRecord) -> e.ConsentRecord:
-        row = m.UserConsent(user_id=record.user_id, version=record.version)
+        row = m.UserConsent(
+            user_id=record.user_id,
+            consent_document_id=record.consent_document_id,
+            privacy_policy_document_id=record.privacy_policy_document_id,
+        )
         self._s.add(row)
         await self._s.flush()
         return _consent_to_domain(row)

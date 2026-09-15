@@ -11,6 +11,7 @@ from avrora_bot.adapters.database.repositories import (
     SqlActionLogRepository,
     SqlCalendarRepository,
     SqlConsentRepository,
+    SqlLegalDocumentRepository,
     SqlOneTimeRepository,
     SqlRoleRepository,
     SqlScheduleRepository,
@@ -50,6 +51,7 @@ class SqlAlchemyUnitOfWork:
         self.one_time = SqlOneTimeRepository(s)
         self.calendar = SqlCalendarRepository(s)
         self.action_log = SqlActionLogRepository(s)
+        self.legal_documents = SqlLegalDocumentRepository(s)
         self.consents = SqlConsentRepository(s)
         return self
 

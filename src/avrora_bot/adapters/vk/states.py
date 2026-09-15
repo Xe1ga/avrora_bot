@@ -28,3 +28,11 @@ class UserEditState(BaseStateGroup):
     BIRTHDATE = 'user_edit:birthdate'
     HEIGHT = 'user_edit:height'
     PHONE = 'user_edit:phone'
+
+
+class AdminState(BaseStateGroup):
+    """Подтверждения необратимых административных действий."""
+
+    # Ожидание явного текста «ПОДТВЕРЖДАЮ» перед уничтожением персональных
+    # данных пользователя (ТЗ 3.6, 152-ФЗ) — см. handlers/admin.py.
+    CONFIRM_DELETE_USER = 'admin:confirm_delete_user'
