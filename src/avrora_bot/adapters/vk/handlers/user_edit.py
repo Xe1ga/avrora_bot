@@ -176,7 +176,10 @@ def register(bot: Bot, ctx: BotContext) -> None:
         # для сравнения с `BaseStateGroup`, но не `__ne__` — из-за этого
         # `!=` всегда возвращает True (сравнение как обычных строк) и
         # проверка ниже отсекала бы все вызовы, включая корректные.
-        if not await _current_state(message.peer_id) == UserEditState.SELECT_FIELD:  # noqa: SIM201
+        if (
+            not await _current_state(message.peer_id)  # noqa: SIM201
+            == UserEditState.SELECT_FIELD
+        ):
             return
         await dispenser.delete(message.peer_id)
         await message.answer(
