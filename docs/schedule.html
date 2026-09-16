@@ -173,7 +173,7 @@
 
     .event {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 12px;
       background: var(--card);
       border: 1px solid var(--border);
@@ -191,6 +191,14 @@
       font-size: 14px;
       white-space: nowrap;
       min-width: 92px;
+    }
+
+    .event-time.is-unset {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      white-space: normal;
+      line-height: 1.3;
     }
 
     .badge {
@@ -218,9 +226,8 @@
     .event-place {
       font-size: 13px;
       color: var(--muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow-wrap: break-word;
+      white-space: normal;
     }
 
     .event-comment {
@@ -515,11 +522,12 @@
         for (const ev of evs) {
           const isPast = date < TODAY;
           const time = ev.time || 'время не указано';
+          const timeClass = ev.time ? 'event-time' : 'event-time is-unset';
           const place = ev.place ? `<div class="event-place">📍 ${escapeHtml(ev.place)}</div>` : '';
           const comment = ev.comment ? `<div class="event-comment">${escapeHtml(ev.comment)}</div>` : '';
           html += `
             <div class="event${isPast ? ' is-past' : ''}">
-              <div class="event-time">${escapeHtml(time)}</div>
+              <div class="${timeClass}">${escapeHtml(time)}</div>
               <span class="badge ${ev.type}">${LABELS[ev.type] || ev.type}</span>
               <div class="event-details">${place}${comment}</div>
             </div>`;
