@@ -36,3 +36,11 @@ class AdminState(BaseStateGroup):
     # Ожидание явного текста «ПОДТВЕРЖДАЮ» перед уничтожением персональных
     # данных пользователя (ТЗ 3.6, 152-ФЗ) — см. handlers/admin.py.
     CONFIRM_DELETE_USER = 'admin:confirm_delete_user'
+
+
+class SubscriptionState(BaseStateGroup):
+    """Пошаговая фиксация голосования по абонементу (ТЗ 3.2)."""
+
+    # Ожидание списка vk_id проголосовавших после команды «голоса <period>»
+    # — см. handlers/subscriptions.py.
+    VOTERS = 'subscription:voters'

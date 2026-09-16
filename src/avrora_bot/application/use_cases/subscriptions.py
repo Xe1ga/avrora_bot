@@ -218,6 +218,100 @@ class SubscriptionUseCases:
             )
             await uow.commit()
 
+    async def add_voter(
+        self, actor_vk_id: int, period: MonthPeriod, target_vk_id: int
+    ) -> Subscription:
+        """Добавляет проголосовавшего в уже существующую подписку.
+
+        Сумма на человека пересчитывается автоматически по новому числу
+        голосов; если сборщик выставлял сумму вручную (``override_amount``),
+        её нужно будет задать заново.
+        """
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
+            subscription = await uow.subscriptions.get_for_month(period)
+            if subscription is None:
+                raise NotFoundError('Подписка на месяц не найдена')
+            user = await uow.users.get_by_vk_id(target_vk_id)
+            if user is None:
+                raise NotFoundError(
+                    f'Пользователь с vk_id {target_vk_id} не найден'
+                )
+            existing = await uow.subscriptions.get_payment(
+                subscription.id, user.id
+            )
+            if existing is not None:
+                raise ValidationError(
+                    'Этот участник уже в списке проголосовавших'
+                )
+            await uow.subscriptions.add_payment(
+                SubscriptionPayment(
+                    subscription_id=subscription.id, user_id=user.id
+                )
+            )
+            subscription.voters_count += 1
+            subscription.per_person_amount = per_person(
+                subscription.total_amount, subscription.voters_count
+            )
+            await uow.subscriptions.update(subscription)
+            await record_action(
+                uow,
+                actor_vk_id,
+                'subscription.add_voter',
+                f'{period} vk_id={target_vk_id}',
+            )
+            await uow.commit()
+            return subscription
+
+    async def remove_voter(
+        self, actor_vk_id: int, period: MonthPeriod, target_vk_id: int
+    ) -> Subscription:
+        """Убирает проголосовавшего из подписки (например, ввели по ошибке).
+
+        Сумма на человека пересчитывается автоматически по новому числу
+        голосов; если сборщик выставлял сумму вручную (``override_amount``),
+        её нужно будет задать заново.
+        """
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
+            subscription = await uow.subscriptions.get_for_month(period)
+            if subscription is None:
+                raise NotFoundError('Подписка на месяц не найдена')
+            user = await uow.users.get_by_vk_id(target_vk_id)
+            if user is None:
+                raise NotFoundError(
+                    f'Пользователь с vk_id {target_vk_id} не найден'
+                )
+            payment = await uow.subscriptions.get_payment(
+                subscription.id, user.id
+            )
+            if payment is None:
+                raise NotFoundError(
+                    'Участник не входит в список проголосовавших'
+                )
+            if subscription.voters_count <= 1:
+                raise ValidationError(
+                    'Нельзя удалить последнего проголосовавшего из подписки'
+                )
+            await uow.subscriptions.delete_payment(payment.id)
+            subscription.voters_count -= 1
+            subscription.per_person_amount = per_person(
+                subscription.total_amount, subscription.voters_count
+            )
+            await uow.subscriptions.update(subscription)
+            await record_action(
+                uow,
+                actor_vk_id,
+                'subscription.remove_voter',
+                f'{period} vk_id={target_vk_id}',
+            )
+            await uow.commit()
+            return subscription
+
     async def month_summary(self, period: MonthPeriod) -> MonthSummary:
         """Строит сводку по месяцу (для отчётов)."""
         async with self._uow_factory() as uow:

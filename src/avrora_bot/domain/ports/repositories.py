@@ -127,6 +127,8 @@ class SubscriptionRepository(Protocol):
 
     async def update_payment(self, payment: SubscriptionPayment) -> None: ...
 
+    async def delete_payment(self, payment_id: int) -> None: ...
+
 
 class OneTimeRepository(Protocol):
     """Разовые посещения (тариф хранится в ``TariffRepository``)."""

@@ -3,19 +3,23 @@
 from vkbottle import Bot
 from vkbottle.bot import Message
 
+from avrora_bot.adapters.vk import keyboards
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.handlers import helpers
+from avrora_bot.adapters.vk.states import SubscriptionState
 from avrora_bot.application.services.permissions import has_access
 from avrora_bot.domain.enums import RoleName
-from avrora_bot.domain.errors import DomainError, ValidationError
+from avrora_bot.domain.errors import DomainError
 
 _SUBSCRIPTIONS_HELP_TEXT = (
     '💰 Команды по абонементам:\n\n'
     '• «расчёт <период> <число голосов>» — расчёт суммы на человека\n'
     '  Пример: расчёт 2026-09 12\n'
-    '• «голоса <период>» — зафиксировать голосование; список vk_id '
-    'указывается на следующих строках\n'
+    '• «голоса <период>» — зафиксировать голосование; бот отдельным '
+    'сообщением запросит список vk_id проголосовавших\n'
     '• «сумма <период> <сумма>» — изменить сумму на человека\n'
+    '• «добавить голос <период> <vk_id>» — добавить участника в список\n'
+    '• «убрать голос <период> <vk_id>» — убрать участника из списка\n'
     '• «оплатил <период> <vk_id>» / «не оплатил <период> <vk_id>» — '
     'отметить оплату'
 )
@@ -23,6 +27,7 @@ _SUBSCRIPTIONS_HELP_TEXT = (
 
 def register(bot: Bot, ctx: BotContext) -> None:
     """Регистрирует хендлеры абонементов."""
+    dispenser = bot.state_dispenser
 
     @bot.on.message(
         text=['расчёт <period> <voters:int>', 'расчет <period> <voters:int>']
@@ -48,24 +53,49 @@ def register(bot: Bot, ctx: BotContext) -> None:
         )
 
     @bot.on.message(text=['голоса <period>'])
-    async def register_voting(message: Message, period: str) -> None:
-        # Список vk_id ожидается в тексте после команды на новых строках.
-        lines = message.text.splitlines()
-        body = '\n'.join(lines[1:]) if len(lines) > 1 else ''
+    async def start_register_voting(message: Message, period: str) -> None:
+        # Список vk_id запрашивается отдельным сообщением через FSM, а не
+        # новыми строками этого же сообщения — раньше сборщики нередко
+        # присылали id вторым сообщением, и бот его молча игнорировал
+        # (не было хендлера, ловящего продолжение диалога).
+        try:
+            helpers.parse_period(period)
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        roles = await ctx.user_management.effective_roles(message.from_id)
+        if not has_access(roles, RoleName.COLLECTOR):
+            await message.answer(
+                '⚠️ Команда доступна только сборщику платежей.'
+            )
+            return
+        await dispenser.set(
+            message.peer_id, SubscriptionState.VOTERS, period=period
+        )
+        await message.answer(
+            'Отправьте список vk_id проголосовавших — каждый с новой '
+            'строки или через запятую.',
+            keyboard=keyboards.cancel(),
+        )
+
+    @bot.on.message(state=SubscriptionState.VOTERS)
+    async def finish_register_voting(message: Message) -> None:
+        peer = await dispenser.get(message.peer_id)
+        period = peer.payload['period']
         try:
             month = helpers.parse_period(period)
-            if not body.strip():
-                raise ValidationError(
-                    'Добавьте список vk_id проголосовавших '
-                    '(каждый с новой строки).'
-                )
-            voter_ids = helpers.parse_vk_ids(body)
+            voter_ids = helpers.parse_vk_ids(message.text)
             sub = await ctx.subscriptions.register_voting(
                 message.from_id, month, voter_ids
             )
         except DomainError as exc:
-            await message.answer(f'⚠️ {exc}')
+            await message.answer(
+                f'⚠️ {exc}\nПришлите список vk_id ещё раз или нажмите '
+                '«Отмена».',
+                keyboard=keyboards.cancel(),
+            )
             return
+        await dispenser.delete(message.peer_id)
         await message.answer(
             f'Подписка на {month.label()} создана.\n'
             f'Проголосовало: {sub.voters_count}, '
@@ -88,6 +118,38 @@ def register(bot: Bot, ctx: BotContext) -> None:
             return
         await message.answer(
             f'Сумма абонемента на {month.label()}: {sub.per_person_amount} ₽.'
+        )
+
+    @bot.on.message(text=['добавить голос <period> <vk_id:int>'])
+    async def add_voter(message: Message, period: str, vk_id: int) -> None:
+        try:
+            month = helpers.parse_period(period)
+            sub = await ctx.subscriptions.add_voter(
+                message.from_id, month, vk_id
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await message.answer(
+            f'Добавлено: vk_id {vk_id}.\n'
+            f'Проголосовало: {sub.voters_count}, '
+            f'сумма на человека: {sub.per_person_amount} ₽.'
+        )
+
+    @bot.on.message(text=['убрать голос <period> <vk_id:int>'])
+    async def remove_voter(message: Message, period: str, vk_id: int) -> None:
+        try:
+            month = helpers.parse_period(period)
+            sub = await ctx.subscriptions.remove_voter(
+                message.from_id, month, vk_id
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await message.answer(
+            f'Убрано: vk_id {vk_id}.\n'
+            f'Проголосовало: {sub.voters_count}, '
+            f'сумма на человека: {sub.per_person_amount} ₽.'
         )
 
     @bot.on.message(text=['оплатил <period> <vk_id:int>'])

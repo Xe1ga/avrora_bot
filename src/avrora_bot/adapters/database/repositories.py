@@ -420,6 +420,12 @@ class SqlSubscriptionRepository:
         row.marked_by_vk_id = payment.marked_by_vk_id
         await self._s.flush()
 
+    async def delete_payment(self, payment_id: int) -> None:
+        row = await self._s.get(m.SubscriptionPayment, payment_id)
+        if row is not None:
+            await self._s.delete(row)
+            await self._s.flush()
+
 
 class SqlOneTimeRepository:
     """Репозиторий разовых посещений."""

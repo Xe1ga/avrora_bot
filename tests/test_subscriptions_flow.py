@@ -13,7 +13,11 @@ from avrora_bot.application.use_cases.registration import (
 from avrora_bot.application.use_cases.roles import RoleUseCases
 from avrora_bot.application.use_cases.subscriptions import SubscriptionUseCases
 from avrora_bot.domain.enums import PaymentStatus, RoleName
-from avrora_bot.domain.errors import PermissionDeniedError
+from avrora_bot.domain.errors import (
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from avrora_bot.domain.ports.uow import UnitOfWork
 from avrora_bot.domain.value_objects import MonthPeriod
 from tests.conftest import FakeVkGateway
@@ -74,3 +78,79 @@ async def test_non_collector_cannot_mark_payment(
 
     with pytest.raises(PermissionDeniedError):
         await subs.mark_payment(102, period, 103, paid=True)
+
+
+@pytest.mark.asyncio
+async def test_add_voter_recalculates_amount(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    reg, roles, subs = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(101, period, [101, 102])
+
+    await reg.self_register(RegistrationData(vk_id=104, full_name='D D'))
+    await reg.approve(ADMIN_VK_ID, 104)
+
+    sub = await subs.add_voter(101, period, 104)
+    assert sub.voters_count == 3
+    assert sub.per_person_amount == Decimal('21917')  # 65750/3 ceil
+
+    summary = await subs.month_summary(period)
+    assert {r.user.full_name for r in summary.rows} == {'A A', 'B B', 'D D'}
+
+
+@pytest.mark.asyncio
+async def test_add_voter_rejects_duplicate(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, _, subs = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(101, period, [101, 102])
+
+    with pytest.raises(ValidationError):
+        await subs.add_voter(101, period, 102)
+
+
+@pytest.mark.asyncio
+async def test_remove_voter_recalculates_amount(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, _, subs = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(101, period, [101, 102, 103])
+
+    sub = await subs.remove_voter(101, period, 103)
+    assert sub.voters_count == 2
+    assert sub.per_person_amount == Decimal('32875')  # 65750/2 ceil
+
+    summary = await subs.month_summary(period)
+    assert {r.user.full_name for r in summary.rows} == {'A A', 'B B'}
+
+
+@pytest.mark.asyncio
+async def test_remove_voter_rejects_unknown_member(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, _, subs = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(101, period, [101, 102])
+
+    with pytest.raises(NotFoundError):
+        await subs.remove_voter(101, period, 103)
+
+
+@pytest.mark.asyncio
+async def test_remove_voter_rejects_last_one(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, _, subs = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(101, period, [101])
+
+    with pytest.raises(ValidationError):
+        await subs.remove_voter(101, period, 101)
