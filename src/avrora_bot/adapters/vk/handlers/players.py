@@ -45,16 +45,20 @@ def register(bot: Bot, ctx: BotContext) -> None:
 
 
 def _format_player(user: User) -> str:
-    """Одна карточка игрока: ФИО, ДР, рост, телефон, vk_id."""
+    """Одна карточка игрока: ФИО, ДР, рост, телефон, vk_id, роли."""
     height = f'{user.height_cm} см' if user.height_cm is not None else '—'
     birthdate = (
         user.birthdate.strftime('%d.%m.%Y') if user.birthdate else '—'
     )
     phone = user.phone or '—'
+    # Как и в других местах (admin.py, common.py) — отсортированные
+    # значения enum через запятую, без отдельных русских подписей.
+    roles = ', '.join(sorted(role.value for role in user.roles)) or '—'
     return (
         f'👤 {user.full_name}\n'
         f'ДР: {birthdate}\n'
         f'Рост: {height}\n'
         f'Телефон: {phone}\n'
-        f'vk_id: {user.vk_id}'
+        f'vk_id: {user.vk_id}\n'
+        f'Роли: {roles}'
     )

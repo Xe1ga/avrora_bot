@@ -135,6 +135,14 @@ async def test_list_players_allows_collector_and_curator(
 
     players = await users.list_players(OTHER_PLAYER_VK_ID)
     assert {p.vk_id for p in players} == {PLAYER_VK_ID, OTHER_PLAYER_VK_ID}
+    by_vk_id = {p.vk_id: p for p in players}
+    # Роли отражают полный набор, а не только player, использованный
+    # для отбора выше мы ещё назначили COLLECTOR.
+    assert by_vk_id[PLAYER_VK_ID].roles == {RoleName.PLAYER}
+    assert by_vk_id[OTHER_PLAYER_VK_ID].roles == {
+        RoleName.PLAYER,
+        RoleName.COLLECTOR,
+    }
 
 
 @pytest.mark.asyncio
