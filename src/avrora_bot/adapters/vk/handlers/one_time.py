@@ -185,8 +185,8 @@ def register(bot: Bot, ctx: BotContext) -> None:
         for row in rows:
             mark = '✅' if row.visit.status.value == 'paid' else '❌'
             line = (
-                f'{mark} {row.full_name} — '
-                f'{row.visit.visit_date.strftime("%d.%m")} '
+                f'{mark} {row.visit.visit_date.strftime("%d.%m")} — '
+                f'{row.full_name} '
                 f'({row.visit.amount} ₽) [id {row.visit.id}]'
             )
             if row.marked_by_name is not None:
