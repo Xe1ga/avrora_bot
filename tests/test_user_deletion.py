@@ -61,7 +61,7 @@ async def _register_active_player(
     reg: RegistrationUseCases,
     consent_doc: e.LegalDocument,
     privacy_doc: e.LegalDocument,
-) -> None:
+) -> e.User:
     await reg.self_register(
         RegistrationData(
             vk_id=PLAYER_VK_ID,
@@ -73,7 +73,7 @@ async def _register_active_player(
             privacy_policy_document_id=privacy_doc.id,
         )
     )
-    await reg.approve(ADMIN_VK_ID, PLAYER_VK_ID)
+    return await reg.approve(ADMIN_VK_ID, PLAYER_VK_ID)
 
 
 @pytest.mark.asyncio
@@ -85,10 +85,10 @@ async def test_delete_personal_data_anonymizes_and_revokes_roles(
     reg = RegistrationUseCases(uow_factory, vk)
     roles = RoleUseCases(uow_factory, vk)
     users = UserManagementUseCases(uow_factory, vk)
-    await _register_active_player(reg, consent_doc, privacy_doc)
+    player = await _register_active_player(reg, consent_doc, privacy_doc)
     await roles.assign_role(ADMIN_VK_ID, PLAYER_VK_ID, RoleName.COLLECTOR)
 
-    deleted = await users.delete_personal_data(ADMIN_VK_ID, PLAYER_VK_ID)
+    deleted = await users.delete_personal_data(ADMIN_VK_ID, player.id)
 
     assert deleted.status is UserStatus.DELETED
     assert deleted.full_name != 'Иван Иванов'
@@ -118,14 +118,14 @@ async def test_delete_personal_data_keeps_consent_and_payment_history(
     reg = RegistrationUseCases(uow_factory, vk)
     users = UserManagementUseCases(uow_factory, vk)
     subs = SubscriptionUseCases(uow_factory, vk)
-    await _register_active_player(reg, consent_doc, privacy_doc)
+    player = await _register_active_player(reg, consent_doc, privacy_doc)
     period = MonthPeriod(2026, 9)
     await subs.calculate(ADMIN_VK_ID, period, voters=1)
-    await subs.register_voting(ADMIN_VK_ID, period, [PLAYER_VK_ID])
+    await subs.register_voting(ADMIN_VK_ID, period, [str(PLAYER_VK_ID)])
     await subs.set_fact_amount(ADMIN_VK_ID, period, Decimal('1000'))
     await subs.mark_payment(ADMIN_VK_ID, period, str(PLAYER_VK_ID), paid=True)
 
-    deleted = await users.delete_personal_data(ADMIN_VK_ID, PLAYER_VK_ID)
+    deleted = await users.delete_personal_data(ADMIN_VK_ID, player.id)
 
     async with uow_factory() as uow:
         consents = await uow.consents.list_for_user(deleted.id)
@@ -172,13 +172,13 @@ async def test_delete_personal_data_twice_raises_validation_error(
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     reg = RegistrationUseCases(uow_factory, vk)
     users = UserManagementUseCases(uow_factory, vk)
-    await reg.self_register(
+    player = await reg.self_register(
         RegistrationData(vk_id=PLAYER_VK_ID, full_name='Иван Иванов')
     )
-    await users.delete_personal_data(ADMIN_VK_ID, PLAYER_VK_ID)
+    await users.delete_personal_data(ADMIN_VK_ID, player.id)
 
     with pytest.raises(ValidationError):
-        await users.delete_personal_data(ADMIN_VK_ID, PLAYER_VK_ID)
+        await users.delete_personal_data(ADMIN_VK_ID, player.id)
 
 
 @pytest.mark.asyncio
@@ -197,7 +197,7 @@ async def test_self_register_after_deletion_reuses_row_as_new_request(
             privacy_policy_document_id=privacy_v1.id,
         )
     )
-    await users.delete_personal_data(ADMIN_VK_ID, PLAYER_VK_ID)
+    await users.delete_personal_data(ADMIN_VK_ID, first.id)
 
     consent_v2, privacy_v2 = await _publish_documents(uow_factory, '2.0')
     second = await reg.self_register(

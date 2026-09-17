@@ -7,6 +7,7 @@ from avrora_bot.adapters.vk import keyboards
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.states import AdminState
 from avrora_bot.application.services.permissions import has_access
+from avrora_bot.application.services.user_lookup import vk_id_label
 from avrora_bot.application.use_cases.registration import RegistrationData
 from avrora_bot.domain.enums import RoleName, UserStatus
 from avrora_bot.domain.errors import DomainError
@@ -15,9 +16,13 @@ _ADMIN_HELP_TEXT = (
     '🛠 Команды администратора:\n\n'
     '• «добавить <vk_id> <роль> <ФИО>» — добавить пользователя вручную\n'
     '  Пример: добавить 12345 игрок Иван Иванов\n'
+    '• «добавить безвк <ФИО>» — добавить игрока без аккаунта ВК; учёт '
+    '(абонементы/разовые посещения) ведётся по нему так же, по ФИО\n'
+    '  Пример: добавить безвк Иван Иванов\n'
     '• «роль <vk_id> <роль>» — назначить роль\n'
     '• «снять роль <vk_id> <роль>» — снять роль\n'
-    '• «удалить пользователя <vk_id>» — уничтожить персональные данные\n'
+    '• «удалить пользователя <vk_id или ФИО>» — уничтожить персональные '
+    'данные\n'
     '  (ФИО/телефон/ДР/рост) по отзыву согласия, ст. 21 152-ФЗ\n\n'
     'Роли: админ/сборщик/куратор/игрок.'
 )
@@ -111,6 +116,23 @@ def register(bot: Bot, ctx: BotContext) -> None:
             f'Добавлен {full_name} (vk_id {vk_id}) с ролью {role_enum.value}.'
         )
 
+    @bot.on.message(text=['добавить безвк <full_name>'])
+    async def add_player_without_vk(
+        message: Message, full_name: str
+    ) -> None:
+        try:
+            user = await ctx.registration.admin_add_player_without_vk(
+                message.from_id, full_name
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await message.answer(
+            f'Добавлен игрок «{user.full_name}» без аккаунта ВК '
+            f'(id {user.id}). Абонементы/разовые посещения ищут его по '
+            'ФИО, как и остальных участников.'
+        )
+
     @bot.on.message(text=['роль <vk_id:int> <role>'])
     async def assign_role(message: Message, vk_id: int, role: str) -> None:
         role_enum = _parse_role(role)
@@ -137,10 +159,10 @@ def register(bot: Bot, ctx: BotContext) -> None:
             return
         await message.answer(f'Роль {role_enum.value} снята с vk_id {vk_id}.')
 
-    @bot.on.message(text=['удалить пользователя <vk_id:int>'])
-    async def start_delete_user(message: Message, vk_id: int) -> None:
+    @bot.on.message(text=['удалить пользователя <target>'])
+    async def start_delete_user(message: Message, target: str) -> None:
         try:
-            user = await ctx.user_management.get_user(message.from_id, vk_id)
+            user = await ctx.user_management.get_user(message.from_id, target)
         except DomainError as exc:
             await message.answer(f'⚠️ {exc}')
             return
@@ -151,7 +173,9 @@ def register(bot: Bot, ctx: BotContext) -> None:
             return
         roles = ', '.join(sorted(role.value for role in user.roles)) or '—'
         await dispenser.set(
-            message.peer_id, AdminState.CONFIRM_DELETE_USER, vk_id=vk_id
+            message.peer_id,
+            AdminState.CONFIRM_DELETE_USER,
+            target_user_id=user.id,
         )
         await message.answer(
             f'{user.full_name} (роли: {roles}).\n\n'
@@ -166,20 +190,21 @@ def register(bot: Bot, ctx: BotContext) -> None:
     @bot.on.message(state=AdminState.CONFIRM_DELETE_USER)
     async def confirm_delete_user(message: Message) -> None:
         peer = await dispenser.get(message.peer_id)
-        vk_id = peer.payload['vk_id']
+        target_user_id = peer.payload['target_user_id']
         await dispenser.delete(message.peer_id)
         if message.text.strip().upper() != _DELETE_CONFIRM_PHRASE:
             await message.answer('Удаление отменено.')
             return
         try:
-            await ctx.user_management.delete_personal_data(
-                message.from_id, vk_id
+            user = await ctx.user_management.delete_personal_data(
+                message.from_id, target_user_id
             )
         except DomainError as exc:
             await message.answer(f'⚠️ {exc}')
             return
         await message.answer(
-            f'Готово. Персональные данные пользователя (vk_id {vk_id}) удалены.'
+            f'Готово. Персональные данные пользователя '
+            f'({vk_id_label(user.vk_id)}) удалены.'
         )
 
     @bot.on.message(payload={'cmd': 'admin_help'})

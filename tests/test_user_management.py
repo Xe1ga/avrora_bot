@@ -45,24 +45,25 @@ async def test_admin_can_edit_user_fields(
 ) -> None:
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     users = await _prepare(uow_factory, vk)
+    player = await users.get_user(ADMIN_VK_ID, str(PLAYER_VK_ID))
 
     updated = await users.set_full_name(
-        ADMIN_VK_ID, PLAYER_VK_ID, 'Пётр Петров'
+        ADMIN_VK_ID, player.id, 'Пётр Петров'
     )
     assert updated.full_name == 'Пётр Петров'
 
-    updated = await users.set_phone(ADMIN_VK_ID, PLAYER_VK_ID, None)
+    updated = await users.set_phone(ADMIN_VK_ID, player.id, None)
     assert updated.phone is None
 
     updated = await users.set_birthdate(
-        ADMIN_VK_ID, PLAYER_VK_ID, date(1999, 12, 31)
+        ADMIN_VK_ID, player.id, date(1999, 12, 31)
     )
     assert updated.birthdate == date(1999, 12, 31)
 
-    updated = await users.set_height(ADMIN_VK_ID, PLAYER_VK_ID, 190)
+    updated = await users.set_height(ADMIN_VK_ID, player.id, 190)
     assert updated.height_cm == 190
 
-    fetched = await users.get_user(ADMIN_VK_ID, PLAYER_VK_ID)
+    fetched = await users.get_user(ADMIN_VK_ID, str(PLAYER_VK_ID))
     assert fetched.full_name == 'Пётр Петров'
     assert fetched.phone is None
     assert fetched.birthdate == date(1999, 12, 31)
@@ -91,7 +92,7 @@ async def test_edit_unknown_user_raises_not_found(
     users = await _prepare(uow_factory, vk)
 
     with pytest.raises(NotFoundError):
-        await users.get_user(ADMIN_VK_ID, 999999)
+        await users.get_user(ADMIN_VK_ID, '999999')
 
 
 @pytest.mark.asyncio

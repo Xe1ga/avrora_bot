@@ -12,7 +12,10 @@ from decimal import Decimal
 
 from avrora_bot.application.services import permissions
 from avrora_bot.application.services.action_log import record_action
-from avrora_bot.application.services.user_lookup import resolve_user
+from avrora_bot.application.services.user_lookup import (
+    resolve_user,
+    resolve_users,
+)
 from avrora_bot.domain.entities import Subscription, SubscriptionPayment, User
 from avrora_bot.domain.enums import PaymentStatus, RoleName, TariffKind
 from avrora_bot.domain.errors import NotFoundError, ValidationError
@@ -111,18 +114,16 @@ class SubscriptionUseCases:
         self,
         actor_vk_id: int,
         period: MonthPeriod,
-        voter_vk_ids: list[int],
+        voters: list[str],
         override_amount: Decimal | None = None,
     ) -> Subscription:
         """Фиксирует голосование: создаёт подписку и строки оплат.
 
-        :param voter_vk_ids: vk_id проголосовавших (должны быть в БД).
+        :param voters: vk_id или (часть) ФИО каждого проголосовавшего —
+            см. ``application.services.user_lookup.resolve_users``.
         :param override_amount: ручная сумма на человека (приоритет над
             авторасчётом — итоговое решение за сборщиком, ТЗ 3.2 п.2).
         """
-        unique_ids = list(dict.fromkeys(voter_vk_ids))
-        if not unique_ids:
-            raise ValidationError('Список проголосовавших пуст')
         async with self._uow_factory() as uow:
             await permissions.require_role(
                 uow, self._vk, actor_vk_id, RoleName.COLLECTOR
@@ -132,20 +133,20 @@ class SubscriptionUseCases:
                     f'Подписка на {period.label()} уже существует'
                 )
             cost = await self._month_cost(uow, period)
-            voters = len(unique_ids)
+            users = await resolve_users(uow, voters)
+            voters_count = len(users)
             amount = (
                 override_amount
                 if override_amount is not None
-                else per_person(cost.total, voters)
+                else per_person(cost.total, voters_count)
             )
 
-            users = await self._resolve_users(uow, unique_ids)
             subscription = await uow.subscriptions.create(
                 Subscription(
                     period_year=period.year,
                     period_month=period.month,
                     total_amount=cost.total,
-                    voters_count=voters,
+                    voters_count=voters_count,
                     per_person_amount=amount,
                 )
             )
@@ -159,7 +160,7 @@ class SubscriptionUseCases:
                 uow,
                 actor_vk_id,
                 'subscription.register',
-                f'{period} voters={voters} amount={amount}',
+                f'{period} voters={voters_count} amount={amount}',
             )
             await uow.commit()
             return subscription
@@ -231,7 +232,7 @@ class SubscriptionUseCases:
                 uow,
                 actor_vk_id,
                 'subscription.mark_payment',
-                f'{period} vk_id={user.vk_id} paid={paid}',
+                f'{period} user_id={user.id} paid={paid}',
             )
             await uow.commit()
             return user
@@ -278,7 +279,7 @@ class SubscriptionUseCases:
                 uow,
                 actor_vk_id,
                 'subscription.add_voter',
-                f'{period} vk_id={user.vk_id}',
+                f'{period} user_id={user.id}',
             )
             await uow.commit()
             return VoterChange(subscription=subscription, user=user)
@@ -325,7 +326,7 @@ class SubscriptionUseCases:
                 uow,
                 actor_vk_id,
                 'subscription.remove_voter',
-                f'{period} vk_id={user.vk_id}',
+                f'{period} user_id={user.id}',
             )
             await uow.commit()
             return VoterChange(subscription=subscription, user=user)
@@ -345,21 +346,3 @@ class SubscriptionUseCases:
             rows.sort(key=lambda r: r.user.full_name)
             return MonthSummary(subscription=subscription, rows=rows)
 
-    async def _resolve_users(
-        self, uow: UnitOfWork, voter_vk_ids: list[int]
-    ) -> list[User]:
-        """Находит пользователей по vk_id; все должны существовать."""
-        users: list[User] = []
-        missing: list[int] = []
-        for vk_id in voter_vk_ids:
-            user = await uow.users.get_by_vk_id(vk_id)
-            if user is None:
-                missing.append(vk_id)
-            else:
-                users.append(user)
-        if missing:
-            raise NotFoundError(
-                'Не найдены пользователи с vk_id: '
-                + ', '.join(map(str, missing))
-            )
-        return users

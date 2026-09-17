@@ -5,6 +5,7 @@ from vkbottle.bot import Message
 
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.application.services.permissions import has_access
+from avrora_bot.application.services.user_lookup import vk_id_label
 from avrora_bot.domain.entities import User
 from avrora_bot.domain.enums import RoleName
 from avrora_bot.domain.errors import DomainError
@@ -59,6 +60,6 @@ def _format_player(user: User) -> str:
         f'ДР: {birthdate}\n'
         f'Рост: {height}\n'
         f'Телефон: {phone}\n'
-        f'vk_id: {user.vk_id}\n'
+        f'{vk_id_label(user.vk_id)}\n'
         f'Роли: {roles}'
     )

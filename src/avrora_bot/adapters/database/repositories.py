@@ -174,7 +174,12 @@ class SqlUserRepository:
         self._s = session
         self._cipher = cipher
 
-    async def get_by_vk_id(self, vk_id: int) -> e.User | None:
+    async def get_by_vk_id(self, vk_id: int | None) -> e.User | None:
+        # ``vk_id IS NULL`` матчит все ручные («безВК») профили сразу —
+        # не тот вызов, который должен когда-либо однозначно находить
+        # одного человека, поэтому обрываем сразу же, не уходя в SQL.
+        if vk_id is None:
+            return None
         row = await self._s.scalar(
             select(m.User)
             .options(*_USER_LOAD_OPTIONS)

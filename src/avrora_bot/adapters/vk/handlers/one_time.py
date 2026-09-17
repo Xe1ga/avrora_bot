@@ -10,6 +10,7 @@ from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.handlers import helpers
 from avrora_bot.adapters.vk.states import OneTimePaymentEditState, OneTimeState
 from avrora_bot.application.services.permissions import has_access
+from avrora_bot.application.services.user_lookup import vk_id_label
 from avrora_bot.application.use_cases.one_time import VisitRow
 from avrora_bot.domain.enums import PaymentStatus, RoleName, TariffKind
 from avrora_bot.domain.errors import DomainError
@@ -160,7 +161,8 @@ def register(bot: Bot, ctx: BotContext) -> None:
             '',
         ]
         lines.extend(
-            f'• {outcome.user.full_name} (vk_id {outcome.user.vk_id}), '
+            f'• {outcome.user.full_name} '
+            f'({vk_id_label(outcome.user.vk_id)}), '
             f'{outcome.visit.amount} ₽ [id {outcome.visit.id}]'
             for outcome in outcomes
         )
@@ -203,7 +205,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
             return
         await message.answer(
             f'Разовое посещение {outcome.user.full_name} '
-            f'(vk_id {outcome.user.vk_id}): оплачено ✅.'
+            f'({vk_id_label(outcome.user.vk_id)}): оплачено ✅.'
         )
 
     @bot.on.message(text=['редактировать оплату <visit_id:int>'])

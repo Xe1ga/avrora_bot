@@ -16,6 +16,7 @@ from avrora_bot.adapters.vk import keyboards
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.handlers import helpers
 from avrora_bot.adapters.vk.states import UserEditState
+from avrora_bot.application.services.user_lookup import vk_id_label
 from avrora_bot.domain.entities import User
 from avrora_bot.domain.enums import RoleName
 from avrora_bot.domain.errors import DomainError, PermissionDeniedError
@@ -65,7 +66,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
         await dispenser.set(
             message.peer_id,
             UserEditState.SELECT_FIELD,
-            target_vk_id=user.vk_id,
+            target_user_id=user.id,
             full_name=user.full_name,
             phone=user.phone,
             birthdate=user.birthdate,
@@ -77,9 +78,9 @@ def register(bot: Bot, ctx: BotContext) -> None:
 
     async def _apply(message: Message, value: object, setter) -> None:
         peer = await dispenser.get(message.peer_id)
-        target_vk_id = peer.payload['target_vk_id']
+        target_user_id = peer.payload['target_user_id']
         try:
-            user = await setter(message.from_id, target_vk_id, value)
+            user = await setter(message.from_id, target_user_id, value)
         except DomainError as exc:
             await message.answer(f'⚠️ {exc}')
             return
@@ -94,20 +95,15 @@ def register(bot: Bot, ctx: BotContext) -> None:
             return
         await dispenser.set(message.peer_id, UserEditState.SELECT_USER)
         await message.answer(
-            'Введите vk_id пользователя для редактирования:',
+            'Введите vk_id или ФИО пользователя для редактирования:',
             keyboard=keyboards.cancel(),
         )
 
     @bot.on.message(state=UserEditState.SELECT_USER)
     async def select_user(message: Message) -> None:
         try:
-            target_vk_id = int(message.text.strip())
-        except ValueError:
-            await message.answer('vk_id — целое число. Повторите ввод:')
-            return
-        try:
             user = await ctx.user_management.get_user(
-                message.from_id, target_vk_id
+                message.from_id, message.text.strip()
             )
         except PermissionDeniedError as exc:
             await dispenser.delete(message.peer_id)
@@ -116,7 +112,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
             )
             return
         except DomainError as exc:
-            await message.answer(f'⚠️ {exc}\nПовторите ввод vk_id:')
+            await message.answer(f'⚠️ {exc}\nПовторите ввод vk_id/ФИО:')
             return
         await _show_fields(message, user)
 
@@ -207,7 +203,7 @@ def _format_profile(user: User) -> str:
     """Текущие данные профиля + приглашение выбрать поле для правки."""
     height = f'{user.height_cm} см' if user.height_cm is not None else '—'
     lines = [
-        f'👤 Профиль vk_id {user.vk_id}',
+        f'👤 Профиль ({vk_id_label(user.vk_id)})',
         f'ФИО: {user.full_name}',
         f'Телефон: {_display(user.phone)}',
         f'Дата рождения: {_display(user.birthdate)}',

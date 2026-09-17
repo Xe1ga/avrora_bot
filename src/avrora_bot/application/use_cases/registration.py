@@ -137,6 +137,43 @@ class RegistrationUseCases:
             await uow.commit()
             return user
 
+    async def admin_add_player_without_vk(
+        self, admin_vk_id: int, full_name: str
+    ) -> User:
+        """Добавляет игрока без аккаунта ВК — учёт по нему ведётся так же,
+        как и по остальным: абонементы/разовые посещения ищут участников
+        по ФИО через ``application.services.user_lookup.resolve_user``,
+        а не по vk_id, так что этому профилю ничего дополнительно не
+        нужно, кроме ФИО.
+
+        В отличие от ``admin_add_user``, профиль сразу активен, а не
+        ``pending``: подтверждать заявку от несуществующего VK-сообщения
+        нет смысла — решение целиком за администратором, который и вызвал
+        эту команду.
+
+        ФИО не обязано быть уникальным (нет vk_id, чтобы разграничить
+        людей с одинаковым именем) — при неоднозначности сборщик увидит
+        список совпадений и уточнит запрос (см. ``resolve_user``).
+        """
+        async with self._uow_factory() as uow:
+            await permissions.require_admin(uow, self._vk, admin_vk_id)
+            user = await uow.users.add(
+                User(
+                    vk_id=None,
+                    full_name=full_name,
+                    status=UserStatus.ACTIVE,
+                )
+            )
+            await uow.roles.assign(user.id, RoleName.PLAYER)
+            await record_action(
+                uow,
+                admin_vk_id,
+                'user.add_without_vk',
+                f'user_id={user.id} full_name={full_name}',
+            )
+            await uow.commit()
+            return user
+
     async def list_pending(self, admin_vk_id: int) -> list[User]:
         """Возвращает заявки, ожидающие подтверждения."""
         async with self._uow_factory() as uow:

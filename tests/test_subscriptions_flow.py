@@ -53,7 +53,7 @@ async def test_full_subscription_flow(
     assert calc.cost.total == Decimal('65750.000')
     assert calc.per_person_amount == Decimal('21917')  # 65750/3 ceil
 
-    await subs.register_voting(101, period, [101, 102, 103])
+    await subs.register_voting(101, period, ['101', '102', '103'])
     await subs.set_fact_amount(101, period, Decimal('22000'))
     await subs.mark_payment(101, period, '101', paid=True)
     await subs.mark_payment(101, period, 'B B', paid=True)
@@ -74,7 +74,7 @@ async def test_non_collector_cannot_mark_payment(
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     _, _, subs = await _prepare(uow_factory, vk)
     period = MonthPeriod(2026, 9)
-    await subs.register_voting(101, period, [101, 102, 103])
+    await subs.register_voting(101, period, ['101', '102', '103'])
 
     with pytest.raises(PermissionDeniedError):
         await subs.mark_payment(102, period, '103', paid=True)
@@ -87,7 +87,7 @@ async def test_add_voter_recalculates_amount(
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     reg, roles, subs = await _prepare(uow_factory, vk)
     period = MonthPeriod(2026, 9)
-    await subs.register_voting(101, period, [101, 102])
+    await subs.register_voting(101, period, ['101', '102'])
 
     await reg.self_register(RegistrationData(vk_id=104, full_name='D D'))
     await reg.approve(ADMIN_VK_ID, 104)
@@ -110,7 +110,7 @@ async def test_add_voter_rejects_duplicate(
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     _, _, subs = await _prepare(uow_factory, vk)
     period = MonthPeriod(2026, 9)
-    await subs.register_voting(101, period, [101, 102])
+    await subs.register_voting(101, period, ['101', '102'])
 
     with pytest.raises(ValidationError):
         await subs.add_voter(101, period, '102')
@@ -123,7 +123,7 @@ async def test_remove_voter_recalculates_amount(
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     _, _, subs = await _prepare(uow_factory, vk)
     period = MonthPeriod(2026, 9)
-    await subs.register_voting(101, period, [101, 102, 103])
+    await subs.register_voting(101, period, ['101', '102', '103'])
 
     change = await subs.remove_voter(101, period, 'C C')
     assert change.user.vk_id == 103
@@ -143,7 +143,7 @@ async def test_remove_voter_rejects_unknown_member(
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     _, _, subs = await _prepare(uow_factory, vk)
     period = MonthPeriod(2026, 9)
-    await subs.register_voting(101, period, [101, 102])
+    await subs.register_voting(101, period, ['101', '102'])
 
     with pytest.raises(NotFoundError):
         await subs.remove_voter(101, period, '103')
@@ -156,7 +156,7 @@ async def test_remove_voter_rejects_last_one(
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     _, _, subs = await _prepare(uow_factory, vk)
     period = MonthPeriod(2026, 9)
-    await subs.register_voting(101, period, [101])
+    await subs.register_voting(101, period, ['101'])
 
     with pytest.raises(ValidationError):
         await subs.remove_voter(101, period, '101')
@@ -183,7 +183,7 @@ async def test_mark_payment_resolves_target_by_name(
         await reg.approve(ADMIN_VK_ID, vk_id)
     await roles.assign_role(ADMIN_VK_ID, 201, RoleName.COLLECTOR)
     period = MonthPeriod(2026, 9)
-    await subs.register_voting(201, period, [201, 202, 203])
+    await subs.register_voting(201, period, ['201', '202', '203'])
 
     # Уникальная фамилия (без учёта регистра) — находится однозначно.
     user = await subs.mark_payment(201, period, 'петров', paid=True)

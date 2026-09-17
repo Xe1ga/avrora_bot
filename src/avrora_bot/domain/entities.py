@@ -21,9 +21,16 @@ from avrora_bot.domain.enums import (
 
 @dataclass(slots=True)
 class User:
-    """Пользователь клуба."""
+    """Пользователь клуба.
 
-    vk_id: int
+    ``vk_id`` может быть ``None`` — для игрока, добавленного вручную без
+    аккаунта ВК (см. ``RegistrationUseCases.admin_add_player_without_vk``).
+    Такой профиль ведёт учёт (абонементы/разовые посещения) так же, как
+    обычный: остальной код находит его по ФИО через
+    ``application.services.user_lookup.resolve_user``, а не по vk_id.
+    """
+
+    vk_id: int | None
     full_name: str
     status: UserStatus = UserStatus.PENDING
     birthdate: date | None = None

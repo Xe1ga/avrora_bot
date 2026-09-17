@@ -7,7 +7,11 @@ from decimal import Decimal
 
 from avrora_bot.application.services import permissions
 from avrora_bot.application.services.action_log import record_action
-from avrora_bot.application.services.user_lookup import resolve_user
+from avrora_bot.application.services.user_lookup import (
+    resolve_user,
+    resolve_users,
+    vk_id_label,
+)
 from avrora_bot.domain.entities import OneTimePayment, User
 from avrora_bot.domain.enums import PaymentStatus, RoleName, TariffKind
 from avrora_bot.domain.errors import NotFoundError, ValidationError
@@ -52,16 +56,8 @@ class OneTimeUseCases:
         тарифу на эту дату.
 
         :param targets: vk_id или (часть) ФИО каждого участника — см.
-            ``application.services.user_lookup.resolve_user``.
-
-        Список резолвится целиком и только затем сохраняется: если хотя бы
-        один vk_id/ФИО не найден или неоднозначен, весь список отклоняется
-        — иначе часть посещений уже была бы записана, а сборщику пришлось
-        бы разбираться, кто из уже зарегистрированных лишний.
+            ``application.services.user_lookup.resolve_users``.
         """
-        unique_targets = list(dict.fromkeys(t.strip() for t in targets if t.strip()))
-        if not unique_targets:
-            raise ValidationError('Список пуст')
         async with self._uow_factory() as uow:
             await permissions.require_role(
                 uow, self._vk, actor_vk_id, RoleName.COLLECTOR
@@ -72,23 +68,7 @@ class OneTimeUseCases:
             if tariff is None:
                 raise NotFoundError('Тариф разового посещения не задан')
 
-            resolved: list[User] = []
-            errors: list[str] = []
-            for target in unique_targets:
-                try:
-                    resolved.append(await resolve_user(uow, target))
-                except (NotFoundError, ValidationError) as exc:
-                    errors.append(f'«{target}»: {exc}')
-            if errors:
-                raise ValidationError('\n'.join(errors))
-
-            users: list[User] = []
-            seen_ids: set[int] = set()
-            for user in resolved:
-                if user.id not in seen_ids:
-                    seen_ids.add(user.id)
-                    users.append(user)
-
+            users = await resolve_users(uow, targets)
             outcomes: list[VisitOutcome] = []
             for user in users:
                 visit = await uow.one_time.add_visit(
@@ -103,8 +83,8 @@ class OneTimeUseCases:
                 uow,
                 actor_vk_id,
                 'one_time.register_batch',
-                f'date={visit_date} vk_ids='
-                + ','.join(str(u.vk_id) for u in users),
+                f'date={visit_date} user_ids='
+                + ','.join(str(u.id) for u in users),
             )
             await uow.commit()
             return outcomes
@@ -138,7 +118,7 @@ class OneTimeUseCases:
                 uow,
                 actor_vk_id,
                 'one_time.mark_paid',
-                f'vk_id={user.vk_id} visit_id={visit.id}',
+                f'user_id={user.id} visit_id={visit.id}',
             )
             await uow.commit()
             return VisitOutcome(user=user, visit=visit)
@@ -209,6 +189,10 @@ class OneTimeUseCases:
         кто принял деньги, для неоплаченного визита не имеет смысла.
         Если визит уже оплачен, время приёма (``marked_at``) не трогается
         — меняется только сам получатель (исправление ошибки атрибуции).
+
+        :raises ValidationError: если получатель — игрок без аккаунта ВК
+            (``marked_by_vk_id`` хранит именно vk_id, а не внутренний id;
+            ``None`` там неотличим от «оплата ещё не принята»).
         """
         async with self._uow_factory() as uow:
             await permissions.require_role(
@@ -216,6 +200,11 @@ class OneTimeUseCases:
             )
             visit = await self._get_visit_or_raise(uow, visit_id)
             receiver = await resolve_user(uow, target)
+            if receiver.vk_id is None:
+                raise ValidationError(
+                    f'{receiver.full_name} добавлен(а) без аккаунта ВК — '
+                    'принявшим оплату можно указать только участника с ВК'
+                )
             visit.marked_by_vk_id = receiver.vk_id
             if visit.status is not PaymentStatus.PAID:
                 visit.status = PaymentStatus.PAID
@@ -297,7 +286,7 @@ class OneTimeUseCases:
             marked_by_name = (
                 marker.full_name
                 if marker
-                else f'vk_id {visit.marked_by_vk_id}'
+                else vk_id_label(visit.marked_by_vk_id)
             )
         return VisitRow(
             visit=visit, full_name=name, marked_by_name=marked_by_name

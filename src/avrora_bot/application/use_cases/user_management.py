@@ -5,6 +5,7 @@ from datetime import date
 
 from avrora_bot.application.services import permissions
 from avrora_bot.application.services.action_log import record_action
+from avrora_bot.application.services.user_lookup import resolve_user
 from avrora_bot.domain.entities import User
 from avrora_bot.domain.enums import RoleName, UserStatus
 from avrora_bot.domain.errors import NotFoundError, ValidationError
@@ -54,62 +55,67 @@ class UserManagementUseCases:
             players = await uow.roles.users_with_role(RoleName.PLAYER)
             return sorted(players, key=lambda user: user.full_name)
 
-    async def get_user(self, admin_vk_id: int, target_vk_id: int) -> User:
-        """Возвращает профиль пользователя для редактирования.
+    async def get_user(self, admin_vk_id: int, query: str) -> User:
+        """Находит пользователя по vk_id или ФИО для просмотра/правки.
+
+        :param query: vk_id или (часть) ФИО — см.
+            ``application.services.user_lookup.resolve_user``. Игрок,
+            добавленный вручную без ВК, ищется только по ФИО.
 
         :raises PermissionDeniedError: если ``admin_vk_id`` не администратор.
-        :raises NotFoundError: если пользователь с таким vk_id не найден.
+        :raises NotFoundError: если совпадений нет.
+        :raises ValidationError: если запрос пуст или неоднозначен.
         """
         async with self._uow_factory() as uow:
             await permissions.require_admin(uow, self._vk, admin_vk_id)
-            return await self._get_or_raise(uow, target_vk_id)
+            return await resolve_user(uow, query)
 
     async def set_full_name(
-        self, admin_vk_id: int, target_vk_id: int, full_name: str
+        self, admin_vk_id: int, target_user_id: int, full_name: str
     ) -> User:
         """Меняет ФИО пользователя."""
         return await self._update(
             admin_vk_id,
-            target_vk_id,
+            target_user_id,
             'user.edit_full_name',
             lambda user: setattr(user, 'full_name', full_name),
         )
 
     async def set_phone(
-        self, admin_vk_id: int, target_vk_id: int, phone: str | None
+        self, admin_vk_id: int, target_user_id: int, phone: str | None
     ) -> User:
         """Меняет телефон пользователя (``None`` — очистить)."""
         return await self._update(
             admin_vk_id,
-            target_vk_id,
+            target_user_id,
             'user.edit_phone',
             lambda user: setattr(user, 'phone', phone),
         )
 
     async def set_birthdate(
-        self, admin_vk_id: int, target_vk_id: int, birthdate: date | None
+        self, admin_vk_id: int, target_user_id: int, birthdate: date | None
     ) -> User:
         """Меняет дату рождения пользователя (``None`` — очистить)."""
         return await self._update(
             admin_vk_id,
-            target_vk_id,
+            target_user_id,
             'user.edit_birthdate',
             lambda user: setattr(user, 'birthdate', birthdate),
         )
 
     async def set_height(
-        self, admin_vk_id: int, target_vk_id: int, height_cm: int | None
+        self, admin_vk_id: int, target_user_id: int, height_cm: int | None
     ) -> User:
         """Меняет рост пользователя, см (``None`` — очистить)."""
         return await self._update(
             admin_vk_id,
-            target_vk_id,
+            target_user_id,
             'user.edit_height',
             lambda user: setattr(user, 'height_cm', height_cm),
         )
 
     async def delete_personal_data(
-        self, admin_vk_id: int, target_vk_id: int
+        self, admin_vk_id: int, target_user_id: int
     ) -> User:
         """
         Уничтожает персональные данные пользователя (ТЗ 3.6, 152-ФЗ ст. 21):
@@ -124,12 +130,12 @@ class UserManagementUseCases:
         прошлой обработки и самого факта отзыва — нужен оператору для
         защиты при проверке).
 
-        :raises NotFoundError: если пользователь с таким vk_id не найден.
+        :raises NotFoundError: если пользователь с таким id не найден.
         :raises ValidationError: если данные уже были уничтожены ранее.
         """
         async with self._uow_factory() as uow:
             await permissions.require_admin(uow, self._vk, admin_vk_id)
-            user = await self._get_or_raise(uow, target_vk_id)
+            user = await self._get_or_raise(uow, target_user_id)
             if user.status is UserStatus.DELETED:
                 raise ValidationError(
                     'Персональные данные этого пользователя уже удалены'
@@ -147,7 +153,7 @@ class UserManagementUseCases:
                 uow,
                 admin_vk_id,
                 'user.delete_personal_data',
-                f'vk_id={target_vk_id}',
+                f'user_id={target_user_id}',
             )
             await uow.commit()
             return user
@@ -155,24 +161,24 @@ class UserManagementUseCases:
     async def _update(
         self,
         admin_vk_id: int,
-        target_vk_id: int,
+        target_user_id: int,
         action: str,
         mutate: _Mutator,
     ) -> User:
         async with self._uow_factory() as uow:
             await permissions.require_admin(uow, self._vk, admin_vk_id)
-            user = await self._get_or_raise(uow, target_vk_id)
+            user = await self._get_or_raise(uow, target_user_id)
             mutate(user)
             await uow.users.update(user)
             await record_action(
-                uow, admin_vk_id, action, f'vk_id={target_vk_id}'
+                uow, admin_vk_id, action, f'user_id={target_user_id}'
             )
             await uow.commit()
             return user
 
     @staticmethod
-    async def _get_or_raise(uow: UnitOfWork, target_vk_id: int) -> User:
-        user = await uow.users.get_by_vk_id(target_vk_id)
+    async def _get_or_raise(uow: UnitOfWork, target_user_id: int) -> User:
+        user = await uow.users.get_by_id(target_user_id)
         if user is None:
             raise NotFoundError('Пользователь не найден')
         return user

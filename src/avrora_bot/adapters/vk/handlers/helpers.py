@@ -39,31 +39,12 @@ def parse_period(raw: str) -> MonthPeriod:
     return MonthPeriod.parse(raw)
 
 
-def parse_vk_ids(raw: str) -> list[int]:
-    """Разбирает список vk_id из многострочного/через-запятую текста."""
-    tokens = raw.replace(',', '\n').split('\n')
-    ids: list[int] = []
-    for raw_token in tokens:
-        token = raw_token.strip()
-        if not token:
-            continue
-        try:
-            ids.append(int(token))
-        except ValueError as exc:
-            raise ValidationError(
-                f'Ожидаются числовые vk_id, получено: {token!r}'
-            ) from exc
-    if not ids:
-        raise ValidationError('Список пуст')
-    return ids
-
-
 def parse_targets(raw: str) -> list[str]:
     """Разбирает список vk_id/ФИО из многострочного/через-запятую текста.
 
-    В отличие от ``parse_vk_ids``, элементы не приводятся к ``int`` — каждый
-    может быть как vk_id, так и (частью) ФИО; итоговое разрешение делает
-    ``application.services.user_lookup.resolve_user``.
+    Элементы не приводятся к ``int`` — каждый может быть как vk_id, так и
+    (частью) ФИО; итоговое разрешение делает
+    ``application.services.user_lookup.resolve_user``/``resolve_users``.
     """
     tokens = raw.replace(',', '\n').split('\n')
     targets = [token.strip() for token in tokens if token.strip()]

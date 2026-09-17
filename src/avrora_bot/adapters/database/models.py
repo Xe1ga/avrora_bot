@@ -79,8 +79,13 @@ class User(Base, TimestampMixin):
     __tablename__ = 'users'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    vk_id: Mapped[int] = mapped_column(
-        Integer, unique=True, index=True, nullable=False
+    # NULL — игрок, добавленный вручную без аккаунта ВК (RegistrationUseCases.
+    # admin_add_player_without_vk); обычный UNIQUE-индекс здесь не мешает
+    # заводить сколько угодно таких записей — NULL в SQL всегда «не равен»
+    # другому NULL, так что уникальность проверяется только для заданных
+    # значений (это верно и для SQLite, и для Postgres в проде).
+    vk_id: Mapped[int | None] = mapped_column(
+        Integer, unique=True, index=True, nullable=True
     )
     status: Mapped[UserStatus] = mapped_column(
         String(_ENUM_LEN), default=UserStatus.PENDING

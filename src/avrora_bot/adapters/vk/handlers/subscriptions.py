@@ -8,6 +8,7 @@ from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.handlers import helpers
 from avrora_bot.adapters.vk.states import SubscriptionState
 from avrora_bot.application.services.permissions import has_access
+from avrora_bot.application.services.user_lookup import vk_id_label
 from avrora_bot.domain.enums import RoleName
 from avrora_bot.domain.errors import DomainError
 
@@ -16,7 +17,7 @@ _SUBSCRIPTIONS_HELP_TEXT = (
     '• «расчёт <период> <число голосов>» — расчёт суммы на человека\n'
     '  Пример: расчёт 2026-09 12\n'
     '• «голоса <период>» — зафиксировать голосование; бот отдельным '
-    'сообщением запросит список vk_id проголосовавших\n'
+    'сообщением запросит список vk_id/ФИО проголосовавших\n'
     '• «абонемент <период> <сумма>» — зафиксировать фактическую '
     'цену абонемента\n'
     '• «добавить голос <период> <vk_id или ФИО>» — добавить участника '
@@ -54,7 +55,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
             f'тренер: {result.cost.coach_sum} ₽\n'
             f'Итого: {result.cost.total} ₽\n'
             f'На человека ({voters}): {result.per_person_amount} ₽\n\n'
-            'Зафиксировать: «голоса <период>» со списком vk_id.'
+            'Зафиксировать: «голоса <период>» со списком vk_id/ФИО.'
         )
 
     @bot.on.message(text=['голоса <period>'])
@@ -78,8 +79,8 @@ def register(bot: Bot, ctx: BotContext) -> None:
             message.peer_id, SubscriptionState.VOTERS, period=period
         )
         await message.answer(
-            'Отправьте список vk_id проголосовавших — каждый с новой '
-            'строки или через запятую.',
+            'Отправьте список проголосовавших — vk_id или ФИО, каждый с '
+            'новой строки или через запятую.',
             keyboard=keyboards.cancel(),
         )
 
@@ -89,13 +90,13 @@ def register(bot: Bot, ctx: BotContext) -> None:
         period = peer.payload['period']
         try:
             month = helpers.parse_period(period)
-            voter_ids = helpers.parse_vk_ids(message.text)
+            targets = helpers.parse_targets(message.text)
             sub = await ctx.subscriptions.register_voting(
-                message.from_id, month, voter_ids
+                message.from_id, month, targets
             )
         except DomainError as exc:
             await message.answer(
-                f'⚠️ {exc}\nПришлите список vk_id ещё раз или нажмите '
+                f'⚠️ {exc}\nПришлите список vk_id/ФИО ещё раз или нажмите '
                 '«Отмена».',
                 keyboard=keyboards.cancel(),
             )
@@ -137,7 +138,8 @@ def register(bot: Bot, ctx: BotContext) -> None:
             await message.answer(f'⚠️ {exc}')
             return
         await message.answer(
-            f'Добавлено: {change.user.full_name} (vk_id {change.user.vk_id}).\n'
+            f'Добавлено: {change.user.full_name} '
+            f'({vk_id_label(change.user.vk_id)}).\n'
             f'Проголосовало: {change.subscription.voters_count}, '
             f'сумма на человека: {change.subscription.per_person_amount} ₽.'
         )
@@ -153,7 +155,8 @@ def register(bot: Bot, ctx: BotContext) -> None:
             await message.answer(f'⚠️ {exc}')
             return
         await message.answer(
-            f'Убрано: {change.user.full_name} (vk_id {change.user.vk_id}).\n'
+            f'Убрано: {change.user.full_name} '
+            f'({vk_id_label(change.user.vk_id)}).\n'
             f'Проголосовало: {change.subscription.voters_count}, '
             f'сумма на человека: {change.subscription.per_person_amount} ₽.'
         )
@@ -194,5 +197,6 @@ async def _mark(
         return
     mark = 'оплачено ✅' if paid else 'не оплачено ❌'
     await message.answer(
-        f'Отмечено: {user.full_name} (vk_id {user.vk_id}) — {mark}.'
+        f'Отмечено: {user.full_name} '
+        f'({vk_id_label(user.vk_id)}) — {mark}.'
     )
