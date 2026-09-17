@@ -58,6 +58,20 @@ def parse_vk_ids(raw: str) -> list[int]:
     return ids
 
 
+def parse_targets(raw: str) -> list[str]:
+    """Разбирает список vk_id/ФИО из многострочного/через-запятую текста.
+
+    В отличие от ``parse_vk_ids``, элементы не приводятся к ``int`` — каждый
+    может быть как vk_id, так и (частью) ФИО; итоговое разрешение делает
+    ``application.services.user_lookup.resolve_user``.
+    """
+    tokens = raw.replace(',', '\n').split('\n')
+    targets = [token.strip() for token in tokens if token.strip()]
+    if not targets:
+        raise ValidationError('Список пуст')
+    return targets
+
+
 def parse_event_time(raw: str) -> time | None:
     """Разбирает время ЧЧ:ММ; пустая строка/«-» → None."""
     raw = raw.strip()

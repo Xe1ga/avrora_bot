@@ -37,6 +37,23 @@ class UserManagementUseCases:
         async with self._uow_factory() as uow:
             return await permissions.effective_roles(uow, self._vk, vk_id)
 
+    async def list_players(self, actor_vk_id: int) -> list[User]:
+        """Возвращает всех игроков (роль ``player``) с их данными.
+
+        Доступно администратору, сборщику и куратору — им нужен общий
+        список участников (ФИО, ДР, рост, телефон, vk_id), а не только
+        точечный просмотр/правка одного профиля (``get_user``).
+        """
+        async with self._uow_factory() as uow:
+            await permissions.require_any_role(
+                uow,
+                self._vk,
+                actor_vk_id,
+                (RoleName.ADMIN, RoleName.COLLECTOR, RoleName.CURATOR),
+            )
+            players = await uow.roles.users_with_role(RoleName.PLAYER)
+            return sorted(players, key=lambda user: user.full_name)
+
     async def get_user(self, admin_vk_id: int, target_vk_id: int) -> User:
         """Возвращает профиль пользователя для редактирования.
 

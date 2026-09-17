@@ -66,7 +66,7 @@ def _render_text_summary(period: MonthPeriod, summary: MonthSummary) -> str:
         [
             '',
             f'Оплатили: {summary.paid_count} из {total}',
-            f'Сумма абонемента: {summary.subscription.per_person_amount} ₽',
+            f'Сумма абонемента: {summary.subscription.effective_amount} ₽',
             f'Собрано: {summary.collected} ₽',
         ]
     )

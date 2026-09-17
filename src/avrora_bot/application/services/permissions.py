@@ -4,6 +4,8 @@
 каждом действии, прочие роли читаются из БД в текущей транзакции.
 """
 
+from collections.abc import Iterable
+
 from avrora_bot.domain.enums import RoleName
 from avrora_bot.domain.errors import PermissionDeniedError
 from avrora_bot.domain.ports.uow import UnitOfWork
@@ -79,3 +81,22 @@ async def require_role(
     if await has_role(uow, vk_id, role):
         return
     raise PermissionDeniedError(f'Требуется роль: {role.value}')
+
+
+async def require_any_role(
+    uow: UnitOfWork,
+    vk_gateway: VkGateway,
+    vk_id: int,
+    roles: Iterable[RoleName],
+) -> None:
+    """Проверяет наличие хотя бы одной из ролей; админ имеет доступ ко всему.
+
+    :raises PermissionDeniedError: если прав недостаточно.
+    """
+    if await is_admin(uow, vk_gateway, vk_id):
+        return
+    for role in roles:
+        if await has_role(uow, vk_id, role):
+            return
+    names = ', '.join(role.value for role in roles)
+    raise PermissionDeniedError(f'Требуется одна из ролей: {names}')

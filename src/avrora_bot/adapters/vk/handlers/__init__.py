@@ -11,6 +11,7 @@ from avrora_bot.adapters.vk.handlers import (
     calendar,
     common,
     one_time,
+    players,
     registration,
     reports,
     subscriptions,
@@ -41,6 +42,7 @@ def register_handlers(
     )
     user_edit.register(bot, ctx)
     admin.register(bot, ctx)
+    players.register(bot, ctx)
     subscriptions.register(bot, ctx)
     one_time.register(bot, ctx)
     calendar.register(bot, ctx)

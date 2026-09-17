@@ -116,9 +116,23 @@ class Subscription:
     period_month: int
     total_amount: Decimal  # общая сумма сбора за месяц
     voters_count: int  # число проголосовавших
-    per_person_amount: Decimal  # сумма на человека (расчёт/override)
+    per_person_amount: Decimal  # расчётная сумма на человека
+    per_percent_amount_fact: Decimal | None = None  # факт. сумма сборщика
     id: int | None = None
     created_at: datetime | None = None
+
+    @property
+    def effective_amount(self) -> Decimal:
+        """Сумма, которая по факту собирается с участников (ТЗ 3.2).
+
+        Приоритет — фактическая сумма сборщика, если она зафиксирована;
+        иначе расчётная сумма.
+        """
+        return (
+            self.per_percent_amount_fact
+            if self.per_percent_amount_fact is not None
+            else self.per_person_amount
+        )
 
 
 @dataclass(slots=True)

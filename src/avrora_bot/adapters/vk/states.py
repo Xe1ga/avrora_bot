@@ -44,3 +44,11 @@ class SubscriptionState(BaseStateGroup):
     # Ожидание списка vk_id проголосовавших после команды «голоса <period>»
     # — см. handlers/subscriptions.py.
     VOTERS = 'subscription:voters'
+
+
+class OneTimeState(BaseStateGroup):
+    """Пошаговая регистрация разовых посещений списком (ТЗ 3.2 п.4)."""
+
+    # Ожидание списка vk_id/ФИО посетивших после команды «посетили [дата]»
+    # — по аналогии с SubscriptionState.VOTERS, см. handlers/one_time.py.
+    VISITORS = 'one_time:visitors'

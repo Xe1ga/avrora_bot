@@ -80,7 +80,7 @@ def _write_totals(
 ) -> None:
     start = 3 + len(summary.rows) + 2
     rows: tuple[tuple[str, object], ...] = (
-        ('Сумма абонемента, ₽', summary.subscription.per_person_amount),
+        ('Сумма абонемента, ₽', summary.subscription.effective_amount),
         ('Проголосовало', summary.subscription.voters_count),
         ('Оплатили', summary.paid_count),
         ('Собрано, ₽', summary.collected),

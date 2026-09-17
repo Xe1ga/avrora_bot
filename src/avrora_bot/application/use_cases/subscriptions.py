@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from avrora_bot.application.services import permissions
 from avrora_bot.application.services.action_log import record_action
+from avrora_bot.application.services.user_lookup import resolve_user
 from avrora_bot.domain.entities import Subscription, SubscriptionPayment, User
 from avrora_bot.domain.enums import PaymentStatus, RoleName, TariffKind
 from avrora_bot.domain.errors import NotFoundError, ValidationError
@@ -43,6 +44,14 @@ class PaymentRow:
 
 
 @dataclass(frozen=True, slots=True)
+class VoterChange:
+    """Результат добавления/удаления проголосовавшего."""
+
+    subscription: Subscription
+    user: User
+
+
+@dataclass(frozen=True, slots=True)
 class MonthSummary:
     """Итоговая сводка по месяцу."""
 
@@ -55,7 +64,7 @@ class MonthSummary:
 
     @property
     def collected(self) -> Decimal:
-        return self.subscription.per_person_amount * self.paid_count
+        return self.subscription.effective_amount * self.paid_count
 
 
 class SubscriptionUseCases:
@@ -155,10 +164,16 @@ class SubscriptionUseCases:
             await uow.commit()
             return subscription
 
-    async def override_amount(
+    async def set_fact_amount(
         self, actor_vk_id: int, period: MonthPeriod, amount: Decimal
     ) -> Subscription:
-        """Переопределяет сумму абонемента на человека вручную."""
+        """Фиксирует фактическую сумму абонемента, собираемую с человека.
+
+        В отличие от расчётной ``per_person_amount`` (тарифы / число
+        голосов), эта сумма не пересчитывается при изменении списка
+        проголосовавших и приоритетна во всех отчётах по сдаче средств
+        (``Subscription.effective_amount``, ТЗ 3.2).
+        """
         if amount < 0:
             raise ValidationError('Сумма не может быть отрицательной')
         async with self._uow_factory() as uow:
@@ -168,12 +183,12 @@ class SubscriptionUseCases:
             subscription = await uow.subscriptions.get_for_month(period)
             if subscription is None:
                 raise NotFoundError('Подписка на месяц не найдена')
-            subscription.per_person_amount = amount
+            subscription.per_percent_amount_fact = amount
             await uow.subscriptions.update(subscription)
             await record_action(
                 uow,
                 actor_vk_id,
-                'subscription.override_amount',
+                'subscription.set_fact_amount',
                 f'{period} amount={amount}',
             )
             await uow.commit()
@@ -183,10 +198,14 @@ class SubscriptionUseCases:
         self,
         actor_vk_id: int,
         period: MonthPeriod,
-        target_vk_id: int,
+        target: str,
         paid: bool,
-    ) -> None:
-        """Отмечает факт оплаты абонемента участником."""
+    ) -> User:
+        """Отмечает факт оплаты абонемента участником.
+
+        :param target: vk_id или (часть) ФИО участника — см.
+            ``application.services.user_lookup.resolve_user``.
+        """
         async with self._uow_factory() as uow:
             await permissions.require_role(
                 uow, self._vk, actor_vk_id, RoleName.COLLECTOR
@@ -194,9 +213,7 @@ class SubscriptionUseCases:
             subscription = await uow.subscriptions.get_for_month(period)
             if subscription is None:
                 raise NotFoundError('Подписка на месяц не найдена')
-            user = await uow.users.get_by_vk_id(target_vk_id)
-            if user is None:
-                raise NotFoundError('Пользователь не найден')
+            user = await resolve_user(uow, target)
             payment = await uow.subscriptions.get_payment(
                 subscription.id, user.id
             )
@@ -214,18 +231,23 @@ class SubscriptionUseCases:
                 uow,
                 actor_vk_id,
                 'subscription.mark_payment',
-                f'{period} vk_id={target_vk_id} paid={paid}',
+                f'{period} vk_id={user.vk_id} paid={paid}',
             )
             await uow.commit()
+            return user
 
     async def add_voter(
-        self, actor_vk_id: int, period: MonthPeriod, target_vk_id: int
-    ) -> Subscription:
+        self, actor_vk_id: int, period: MonthPeriod, target: str
+    ) -> VoterChange:
         """Добавляет проголосовавшего в уже существующую подписку.
 
-        Сумма на человека пересчитывается автоматически по новому числу
-        голосов; если сборщик выставлял сумму вручную (``override_amount``),
-        её нужно будет задать заново.
+        :param target: vk_id или (часть) ФИО участника — см.
+            ``application.services.user_lookup.resolve_user``.
+
+        Расчётная сумма на человека (``per_person_amount``) пересчитывается
+        автоматически по новому числу голосов; фактическая сумма сборщика
+        (``per_percent_amount_fact``), если она была зафиксирована, не
+        трогается.
         """
         async with self._uow_factory() as uow:
             await permissions.require_role(
@@ -234,11 +256,7 @@ class SubscriptionUseCases:
             subscription = await uow.subscriptions.get_for_month(period)
             if subscription is None:
                 raise NotFoundError('Подписка на месяц не найдена')
-            user = await uow.users.get_by_vk_id(target_vk_id)
-            if user is None:
-                raise NotFoundError(
-                    f'Пользователь с vk_id {target_vk_id} не найден'
-                )
+            user = await resolve_user(uow, target)
             existing = await uow.subscriptions.get_payment(
                 subscription.id, user.id
             )
@@ -260,19 +278,23 @@ class SubscriptionUseCases:
                 uow,
                 actor_vk_id,
                 'subscription.add_voter',
-                f'{period} vk_id={target_vk_id}',
+                f'{period} vk_id={user.vk_id}',
             )
             await uow.commit()
-            return subscription
+            return VoterChange(subscription=subscription, user=user)
 
     async def remove_voter(
-        self, actor_vk_id: int, period: MonthPeriod, target_vk_id: int
-    ) -> Subscription:
+        self, actor_vk_id: int, period: MonthPeriod, target: str
+    ) -> VoterChange:
         """Убирает проголосовавшего из подписки (например, ввели по ошибке).
 
-        Сумма на человека пересчитывается автоматически по новому числу
-        голосов; если сборщик выставлял сумму вручную (``override_amount``),
-        её нужно будет задать заново.
+        :param target: vk_id или (часть) ФИО участника — см.
+            ``application.services.user_lookup.resolve_user``.
+
+        Расчётная сумма на человека (``per_person_amount``) пересчитывается
+        автоматически по новому числу голосов; фактическая сумма сборщика
+        (``per_percent_amount_fact``), если она была зафиксирована, не
+        трогается.
         """
         async with self._uow_factory() as uow:
             await permissions.require_role(
@@ -281,11 +303,7 @@ class SubscriptionUseCases:
             subscription = await uow.subscriptions.get_for_month(period)
             if subscription is None:
                 raise NotFoundError('Подписка на месяц не найдена')
-            user = await uow.users.get_by_vk_id(target_vk_id)
-            if user is None:
-                raise NotFoundError(
-                    f'Пользователь с vk_id {target_vk_id} не найден'
-                )
+            user = await resolve_user(uow, target)
             payment = await uow.subscriptions.get_payment(
                 subscription.id, user.id
             )
@@ -307,10 +325,10 @@ class SubscriptionUseCases:
                 uow,
                 actor_vk_id,
                 'subscription.remove_voter',
-                f'{period} vk_id={target_vk_id}',
+                f'{period} vk_id={user.vk_id}',
             )
             await uow.commit()
-            return subscription
+            return VoterChange(subscription=subscription, user=user)
 
     async def month_summary(self, period: MonthPeriod) -> MonthSummary:
         """Строит сводку по месяцу (для отчётов)."""

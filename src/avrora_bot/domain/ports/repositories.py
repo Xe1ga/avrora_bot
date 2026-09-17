@@ -143,6 +143,8 @@ class OneTimeRepository(Protocol):
         self, period: MonthPeriod
     ) -> list[OneTimePayment]: ...
 
+    async def unpaid_visits_of(self, user_id: int) -> list[OneTimePayment]: ...
+
 
 class CalendarRepository(Protocol):
     """События календаря."""

@@ -29,6 +29,10 @@ def main_menu(roles: frozenset[RoleName] = frozenset()) -> str:
         .row()
         .add(Text('ℹ️ Помощь', payload={'cmd': 'help'}))
     )
+    if is_admin or is_collector or is_curator:
+        kb = kb.row().add(
+            Text('📋 Список игроков', payload={'cmd': 'players_list'})
+        )
     if is_admin:
         kb = (
             kb.row()

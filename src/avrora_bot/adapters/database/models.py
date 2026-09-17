@@ -274,6 +274,12 @@ class Subscription(Base, TimestampMixin):
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     voters_count: Mapped[int] = mapped_column(Integer)
     per_person_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Реальная сумма, зафиксированная сборщиком (ТЗ 3.2) — то, что по факту
+    # собирается с участников; используется во всех отчётах по сдаче
+    # средств вместо расчётной per_person_amount, когда задана.
+    per_percent_amount_fact: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
 
     payments: Mapped[list[SubscriptionPayment]] = relationship(
         back_populates='subscription', cascade='all, delete-orphan'

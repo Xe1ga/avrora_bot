@@ -85,6 +85,7 @@ def _subscription_to_domain(row: m.Subscription) -> e.Subscription:
         total_amount=row.total_amount,
         voters_count=row.voters_count,
         per_person_amount=row.per_person_amount,
+        per_percent_amount_fact=row.per_percent_amount_fact,
         created_at=row.created_at,
     )
 
@@ -362,6 +363,7 @@ class SqlSubscriptionRepository:
             total_amount=subscription.total_amount,
             voters_count=subscription.voters_count,
             per_person_amount=subscription.per_person_amount,
+            per_percent_amount_fact=subscription.per_percent_amount_fact,
         )
         self._s.add(row)
         await self._s.flush()
@@ -374,6 +376,7 @@ class SqlSubscriptionRepository:
         row.total_amount = subscription.total_amount
         row.voters_count = subscription.voters_count
         row.per_person_amount = subscription.per_person_amount
+        row.per_percent_amount_fact = subscription.per_percent_amount_fact
         await self._s.flush()
 
     async def add_payment(
@@ -468,6 +471,17 @@ class SqlOneTimeRepository:
             .where(
                 m.OneTimePayment.visit_date >= period.first_day,
                 m.OneTimePayment.visit_date <= period.last_day,
+            )
+            .order_by(m.OneTimePayment.visit_date)
+        )
+        return [_one_time_to_domain(r) for r in rows]
+
+    async def unpaid_visits_of(self, user_id: int) -> list[e.OneTimePayment]:
+        rows = await self._s.scalars(
+            select(m.OneTimePayment)
+            .where(
+                m.OneTimePayment.user_id == user_id,
+                m.OneTimePayment.status == PaymentStatus.UNPAID,
             )
             .order_by(m.OneTimePayment.visit_date)
         )

@@ -17,11 +17,16 @@ _SUBSCRIPTIONS_HELP_TEXT = (
     '  Пример: расчёт 2026-09 12\n'
     '• «голоса <период>» — зафиксировать голосование; бот отдельным '
     'сообщением запросит список vk_id проголосовавших\n'
-    '• «сумма <период> <сумма>» — изменить сумму на человека\n'
-    '• «добавить голос <период> <vk_id>» — добавить участника в список\n'
-    '• «убрать голос <период> <vk_id>» — убрать участника из списка\n'
-    '• «оплатил <период> <vk_id>» / «не оплатил <период> <vk_id>» — '
-    'отметить оплату'
+    '• «абонемент <период> <сумма>» — зафиксировать фактическую '
+    'цену абонемента\n'
+    '• «добавить голос <период> <vk_id или ФИО>» — добавить участника '
+    'в список\n'
+    '• «убрать голос <период> <vk_id или ФИО>» — убрать участника из '
+    'списка\n'
+    '• «оплатил <период> <vk_id или ФИО>» / «не оплатил <период> '
+    '<vk_id или ФИО>» — отметить оплату\n\n'
+    'Вместо vk_id можно указать фамилию, «Фамилия Имя» или полное ФИО — '
+    'если совпадений несколько, бот покажет список для уточнения.'
 )
 
 
@@ -100,65 +105,66 @@ def register(bot: Bot, ctx: BotContext) -> None:
             f'Подписка на {month.label()} создана.\n'
             f'Проголосовало: {sub.voters_count}, '
             f'сумма на человека: {sub.per_person_amount} ₽.\n'
-            'Изменить сумму: «сумма <период> <значение>».'
+            'Зафиксировать факт. цену: «абонемент <период> <значение>».'
         )
 
-    @bot.on.message(text=['сумма <period> <amount>'])
-    async def override_amount(
+    @bot.on.message(text=['абонемент <period> <amount>'])
+    async def set_fact_amount(
         message: Message, period: str, amount: str
     ) -> None:
         try:
             month = helpers.parse_period(period)
             value = helpers.parse_amount(amount)
-            sub = await ctx.subscriptions.override_amount(
+            sub = await ctx.subscriptions.set_fact_amount(
                 message.from_id, month, value
             )
         except DomainError as exc:
             await message.answer(f'⚠️ {exc}')
             return
         await message.answer(
-            f'Сумма абонемента на {month.label()}: {sub.per_person_amount} ₽.'
+            f'Факт. цена абонемента на {month.label()}: '
+            f'{sub.per_percent_amount_fact} ₽.'
         )
 
-    @bot.on.message(text=['добавить голос <period> <vk_id:int>'])
-    async def add_voter(message: Message, period: str, vk_id: int) -> None:
+    @bot.on.message(text=['добавить голос <period> <target>'])
+    async def add_voter(message: Message, period: str, target: str) -> None:
         try:
             month = helpers.parse_period(period)
-            sub = await ctx.subscriptions.add_voter(
-                message.from_id, month, vk_id
+            change = await ctx.subscriptions.add_voter(
+                message.from_id, month, target
             )
         except DomainError as exc:
             await message.answer(f'⚠️ {exc}')
             return
         await message.answer(
-            f'Добавлено: vk_id {vk_id}.\n'
-            f'Проголосовало: {sub.voters_count}, '
-            f'сумма на человека: {sub.per_person_amount} ₽.'
+            f'Добавлено: {change.user.full_name} (vk_id {change.user.vk_id}).\n'
+            f'Проголосовало: {change.subscription.voters_count}, '
+            f'сумма на человека: {change.subscription.per_person_amount} ₽.'
         )
 
-    @bot.on.message(text=['убрать голос <period> <vk_id:int>'])
-    async def remove_voter(message: Message, period: str, vk_id: int) -> None:
+    @bot.on.message(text=['убрать голос <period> <target>'])
+    async def remove_voter(message: Message, period: str, target: str) -> None:
         try:
             month = helpers.parse_period(period)
-            sub = await ctx.subscriptions.remove_voter(
-                message.from_id, month, vk_id
+            change = await ctx.subscriptions.remove_voter(
+                message.from_id, month, target
             )
         except DomainError as exc:
             await message.answer(f'⚠️ {exc}')
             return
         await message.answer(
-            f'Убрано: vk_id {vk_id}.\n'
-            f'Проголосовало: {sub.voters_count}, '
-            f'сумма на человека: {sub.per_person_amount} ₽.'
+            f'Убрано: {change.user.full_name} (vk_id {change.user.vk_id}).\n'
+            f'Проголосовало: {change.subscription.voters_count}, '
+            f'сумма на человека: {change.subscription.per_person_amount} ₽.'
         )
 
-    @bot.on.message(text=['оплатил <period> <vk_id:int>'])
-    async def mark_paid(message: Message, period: str, vk_id: int) -> None:
-        await _mark(ctx, message, period, vk_id, paid=True)
+    @bot.on.message(text=['оплатил <period> <target>'])
+    async def mark_paid(message: Message, period: str, target: str) -> None:
+        await _mark(ctx, message, period, target, paid=True)
 
-    @bot.on.message(text=['не оплатил <period> <vk_id:int>'])
-    async def mark_unpaid(message: Message, period: str, vk_id: int) -> None:
-        await _mark(ctx, message, period, vk_id, paid=False)
+    @bot.on.message(text=['не оплатил <period> <target>'])
+    async def mark_unpaid(message: Message, period: str, target: str) -> None:
+        await _mark(ctx, message, period, target, paid=False)
 
     @bot.on.message(payload={'cmd': 'subscriptions_help'})
     async def subscriptions_help(message: Message) -> None:
@@ -173,18 +179,20 @@ async def _mark(
     ctx: BotContext,
     message: Message,
     period: str,
-    vk_id: int,
+    target: str,
     *,
     paid: bool,
 ) -> None:
     """Общая логика отметки оплаты."""
     try:
         month = helpers.parse_period(period)
-        await ctx.subscriptions.mark_payment(
-            message.from_id, month, vk_id, paid
+        user = await ctx.subscriptions.mark_payment(
+            message.from_id, month, target, paid
         )
     except DomainError as exc:
         await message.answer(f'⚠️ {exc}')
         return
     mark = 'оплачено ✅' if paid else 'не оплачено ❌'
-    await message.answer(f'Отмечено: vk_id {vk_id} — {mark}.')
+    await message.answer(
+        f'Отмечено: {user.full_name} (vk_id {user.vk_id}) — {mark}.'
+    )

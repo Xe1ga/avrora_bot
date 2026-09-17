@@ -122,8 +122,8 @@ async def test_delete_personal_data_keeps_consent_and_payment_history(
     period = MonthPeriod(2026, 9)
     await subs.calculate(ADMIN_VK_ID, period, voters=1)
     await subs.register_voting(ADMIN_VK_ID, period, [PLAYER_VK_ID])
-    await subs.override_amount(ADMIN_VK_ID, period, Decimal('1000'))
-    await subs.mark_payment(ADMIN_VK_ID, period, PLAYER_VK_ID, paid=True)
+    await subs.set_fact_amount(ADMIN_VK_ID, period, Decimal('1000'))
+    await subs.mark_payment(ADMIN_VK_ID, period, str(PLAYER_VK_ID), paid=True)
 
     deleted = await users.delete_personal_data(ADMIN_VK_ID, PLAYER_VK_ID)
 

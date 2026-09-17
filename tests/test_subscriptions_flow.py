@@ -54,9 +54,9 @@ async def test_full_subscription_flow(
     assert calc.per_person_amount == Decimal('21917')  # 65750/3 ceil
 
     await subs.register_voting(101, period, [101, 102, 103])
-    await subs.override_amount(101, period, Decimal('22000'))
-    await subs.mark_payment(101, period, 101, paid=True)
-    await subs.mark_payment(101, period, 102, paid=True)
+    await subs.set_fact_amount(101, period, Decimal('22000'))
+    await subs.mark_payment(101, period, '101', paid=True)
+    await subs.mark_payment(101, period, 'B B', paid=True)
 
     summary = await subs.month_summary(period)
     assert summary.paid_count == 2
@@ -77,7 +77,7 @@ async def test_non_collector_cannot_mark_payment(
     await subs.register_voting(101, period, [101, 102, 103])
 
     with pytest.raises(PermissionDeniedError):
-        await subs.mark_payment(102, period, 103, paid=True)
+        await subs.mark_payment(102, period, '103', paid=True)
 
 
 @pytest.mark.asyncio
@@ -92,9 +92,12 @@ async def test_add_voter_recalculates_amount(
     await reg.self_register(RegistrationData(vk_id=104, full_name='D D'))
     await reg.approve(ADMIN_VK_ID, 104)
 
-    sub = await subs.add_voter(101, period, 104)
-    assert sub.voters_count == 3
-    assert sub.per_person_amount == Decimal('21917')  # 65750/3 ceil
+    change = await subs.add_voter(101, period, 'D D')
+    assert change.user.vk_id == 104
+    assert change.subscription.voters_count == 3
+    assert change.subscription.per_person_amount == Decimal(
+        '21917'
+    )  # 65750/3 ceil
 
     summary = await subs.month_summary(period)
     assert {r.user.full_name for r in summary.rows} == {'A A', 'B B', 'D D'}
@@ -110,7 +113,7 @@ async def test_add_voter_rejects_duplicate(
     await subs.register_voting(101, period, [101, 102])
 
     with pytest.raises(ValidationError):
-        await subs.add_voter(101, period, 102)
+        await subs.add_voter(101, period, '102')
 
 
 @pytest.mark.asyncio
@@ -122,9 +125,12 @@ async def test_remove_voter_recalculates_amount(
     period = MonthPeriod(2026, 9)
     await subs.register_voting(101, period, [101, 102, 103])
 
-    sub = await subs.remove_voter(101, period, 103)
-    assert sub.voters_count == 2
-    assert sub.per_person_amount == Decimal('32875')  # 65750/2 ceil
+    change = await subs.remove_voter(101, period, 'C C')
+    assert change.user.vk_id == 103
+    assert change.subscription.voters_count == 2
+    assert change.subscription.per_person_amount == Decimal(
+        '32875'
+    )  # 65750/2 ceil
 
     summary = await subs.month_summary(period)
     assert {r.user.full_name for r in summary.rows} == {'A A', 'B B'}
@@ -140,7 +146,7 @@ async def test_remove_voter_rejects_unknown_member(
     await subs.register_voting(101, period, [101, 102])
 
     with pytest.raises(NotFoundError):
-        await subs.remove_voter(101, period, 103)
+        await subs.remove_voter(101, period, '103')
 
 
 @pytest.mark.asyncio
@@ -153,4 +159,40 @@ async def test_remove_voter_rejects_last_one(
     await subs.register_voting(101, period, [101])
 
     with pytest.raises(ValidationError):
-        await subs.remove_voter(101, period, 101)
+        await subs.remove_voter(101, period, '101')
+
+
+@pytest.mark.asyncio
+async def test_mark_payment_resolves_target_by_name(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    async with uow_factory() as uow:
+        await seed_reference_data(uow)
+        await uow.commit()
+    reg = RegistrationUseCases(uow_factory, vk)
+    roles = RoleUseCases(uow_factory, vk)
+    subs = SubscriptionUseCases(uow_factory, vk)
+    people = [
+        (201, 'Иванов Пётр'),
+        (202, 'Иванов Сергей'),
+        (203, 'Петров Олег'),
+    ]
+    for vk_id, name in people:
+        await reg.self_register(RegistrationData(vk_id=vk_id, full_name=name))
+        await reg.approve(ADMIN_VK_ID, vk_id)
+    await roles.assign_role(ADMIN_VK_ID, 201, RoleName.COLLECTOR)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(201, period, [201, 202, 203])
+
+    # Уникальная фамилия (без учёта регистра) — находится однозначно.
+    user = await subs.mark_payment(201, period, 'петров', paid=True)
+    assert user.vk_id == 203
+
+    # «Фамилия Имя» сужает до одного совпадения среди однофамильцев.
+    user = await subs.mark_payment(201, period, 'иванов пётр', paid=True)
+    assert user.vk_id == 201
+
+    # Одной фамилии на двоих не хватает — нужна уточняющая ошибка.
+    with pytest.raises(ValidationError, match='Иванов Пётр'):
+        await subs.mark_payment(201, period, 'иванов', paid=True)
