@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 from avrora_bot.application.services import permissions
 from avrora_bot.application.services.action_log import record_action
@@ -23,6 +24,7 @@ class VisitRow:
 
     visit: OneTimePayment
     full_name: str
+    marked_by_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,13 +143,162 @@ class OneTimeUseCases:
             await uow.commit()
             return VisitOutcome(user=user, visit=visit)
 
+    async def get_visit(self, actor_vk_id: int, visit_id: int) -> VisitRow:
+        """Возвращает запись о разовом посещении для просмотра/правки."""
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
+            visit = await self._get_visit_or_raise(uow, visit_id)
+            return await self._to_row(uow, visit)
+
+    async def set_visit_date(
+        self, actor_vk_id: int, visit_id: int, visit_date: date
+    ) -> VisitRow:
+        """Меняет дату разового посещения."""
+        return await self._update_visit(
+            actor_vk_id,
+            visit_id,
+            'one_time.edit_date',
+            f'visit_date={visit_date}',
+            lambda visit: setattr(visit, 'visit_date', visit_date),
+        )
+
+    async def set_visit_amount(
+        self, actor_vk_id: int, visit_id: int, amount: Decimal
+    ) -> VisitRow:
+        """Меняет сумму разового посещения."""
+        if amount < 0:
+            raise ValidationError('Сумма не может быть отрицательной')
+        return await self._update_visit(
+            actor_vk_id,
+            visit_id,
+            'one_time.edit_amount',
+            f'amount={amount}',
+            lambda visit: setattr(visit, 'amount', amount),
+        )
+
+    async def set_visit_status(
+        self, actor_vk_id: int, visit_id: int, paid: bool
+    ) -> VisitRow:
+        """Меняет статус оплаты разового посещения (вручную, по id)."""
+
+        def mutate(visit: OneTimePayment) -> None:
+            visit.status = PaymentStatus.PAID if paid else PaymentStatus.UNPAID
+            visit.marked_at = datetime.now(UTC) if paid else None
+            visit.marked_by_vk_id = actor_vk_id if paid else None
+
+        return await self._update_visit(
+            actor_vk_id,
+            visit_id,
+            'one_time.edit_status',
+            f'paid={paid}',
+            mutate,
+        )
+
+    async def set_visit_marked_by(
+        self, actor_vk_id: int, visit_id: int, target: str
+    ) -> VisitRow:
+        """Меняет, кто принял оплату разового посещения (marked_by_vk_id).
+
+        :param target: vk_id или (часть) ФИО получателя оплаты — см.
+            ``application.services.user_lookup.resolve_user``.
+
+        Если визит ещё не был отмечен оплаченным, дополнительно переводит
+        его в статус «оплачено» и фиксирует текущее время — указывать,
+        кто принял деньги, для неоплаченного визита не имеет смысла.
+        Если визит уже оплачен, время приёма (``marked_at``) не трогается
+        — меняется только сам получатель (исправление ошибки атрибуции).
+        """
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
+            visit = await self._get_visit_or_raise(uow, visit_id)
+            receiver = await resolve_user(uow, target)
+            visit.marked_by_vk_id = receiver.vk_id
+            if visit.status is not PaymentStatus.PAID:
+                visit.status = PaymentStatus.PAID
+                visit.marked_at = datetime.now(UTC)
+            await uow.one_time.update_visit(visit)
+            await record_action(
+                uow,
+                actor_vk_id,
+                'one_time.edit_marked_by',
+                f'visit_id={visit_id} marked_by_vk_id={receiver.vk_id}',
+            )
+            await uow.commit()
+            return await self._to_row(uow, visit)
+
+    async def delete_visit(self, actor_vk_id: int, visit_id: int) -> None:
+        """Удаляет запись о разовом посещении по id."""
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
+            await self._get_visit_or_raise(uow, visit_id)
+            await uow.one_time.delete_visit(visit_id)
+            await record_action(
+                uow,
+                actor_vk_id,
+                'one_time.delete_visit',
+                f'visit_id={visit_id}',
+            )
+            await uow.commit()
+
     async def month_visits(self, period: MonthPeriod) -> list[VisitRow]:
-        """Список разовых посещений за месяц с именами участников."""
+        """Список разовых посещений за месяц с именами участников.
+
+        Для оплаченных визитов дополнительно резолвит ``marked_by_vk_id``
+        в ФИО — кому сборщик передал деньги (ТЗ 3.2), чтобы это было
+        видно прямо в сводке, а не только в журнале действий.
+        """
         async with self._uow_factory() as uow:
             visits = await uow.one_time.visits_in_month(period)
-            rows: list[VisitRow] = []
-            for visit in visits:
-                user = await uow.users.get_by_id(visit.user_id)
-                name = user.full_name if user else f'id{visit.user_id}'
-                rows.append(VisitRow(visit=visit, full_name=name))
-            return rows
+            return [await self._to_row(uow, visit) for visit in visits]
+
+    async def _update_visit(
+        self,
+        actor_vk_id: int,
+        visit_id: int,
+        action: str,
+        details: str,
+        mutate: Callable[[OneTimePayment], None],
+    ) -> VisitRow:
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
+            visit = await self._get_visit_or_raise(uow, visit_id)
+            mutate(visit)
+            await uow.one_time.update_visit(visit)
+            await record_action(
+                uow, actor_vk_id, action, f'visit_id={visit_id} {details}'
+            )
+            await uow.commit()
+            return await self._to_row(uow, visit)
+
+    @staticmethod
+    async def _get_visit_or_raise(
+        uow: UnitOfWork, visit_id: int
+    ) -> OneTimePayment:
+        visit = await uow.one_time.get_visit(visit_id)
+        if visit is None:
+            raise NotFoundError('Разовое посещение не найдено')
+        return visit
+
+    @staticmethod
+    async def _to_row(uow: UnitOfWork, visit: OneTimePayment) -> VisitRow:
+        user = await uow.users.get_by_id(visit.user_id)
+        name = user.full_name if user else f'id{visit.user_id}'
+        marked_by_name = None
+        if visit.marked_by_vk_id is not None:
+            marker = await uow.users.get_by_vk_id(visit.marked_by_vk_id)
+            marked_by_name = (
+                marker.full_name
+                if marker
+                else f'vk_id {visit.marked_by_vk_id}'
+            )
+        return VisitRow(
+            visit=visit, full_name=name, marked_by_name=marked_by_name
+        )

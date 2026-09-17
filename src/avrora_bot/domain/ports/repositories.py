@@ -145,6 +145,8 @@ class OneTimeRepository(Protocol):
 
     async def unpaid_visits_of(self, user_id: int) -> list[OneTimePayment]: ...
 
+    async def delete_visit(self, visit_id: int) -> None: ...
+
 
 class CalendarRepository(Protocol):
     """События календаря."""

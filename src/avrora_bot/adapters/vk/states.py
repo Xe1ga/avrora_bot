@@ -52,3 +52,16 @@ class OneTimeState(BaseStateGroup):
     # Ожидание списка vk_id/ФИО посетивших после команды «посетили [дата]»
     # — по аналогии с SubscriptionState.VOTERS, см. handlers/one_time.py.
     VISITORS = 'one_time:visitors'
+
+
+class OneTimePaymentEditState(BaseStateGroup):
+    """Редактирование записи о разовом посещении по id (ТЗ 3.2 п.4).
+
+    Собственный префикс ``one_time_edit:`` — как и у ``UserEditState`` —
+    чтобы не совпадать с другими группами состояний.
+    """
+
+    SELECT_FIELD = 'one_time_edit:select_field'
+    DATE = 'one_time_edit:date'
+    AMOUNT = 'one_time_edit:amount'
+    MARKED_BY = 'one_time_edit:marked_by'

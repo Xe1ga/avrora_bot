@@ -487,6 +487,12 @@ class SqlOneTimeRepository:
         )
         return [_one_time_to_domain(r) for r in rows]
 
+    async def delete_visit(self, visit_id: int) -> None:
+        row = await self._s.get(m.OneTimePayment, visit_id)
+        if row is not None:
+            await self._s.delete(row)
+            await self._s.flush()
+
 
 class SqlCalendarRepository:
     """Репозиторий событий календаря."""

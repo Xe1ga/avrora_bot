@@ -17,6 +17,7 @@ from avrora_bot.application.use_cases.roles import RoleUseCases
 from avrora_bot.domain.enums import PaymentStatus, RoleName
 from avrora_bot.domain.errors import NotFoundError, ValidationError
 from avrora_bot.domain.ports.uow import UnitOfWork
+from avrora_bot.domain.value_objects import MonthPeriod
 from tests.conftest import FakeVkGateway
 
 ADMIN_VK_ID = 1
@@ -154,6 +155,201 @@ async def test_mark_oldest_unpaid_raises_when_nothing_unpaid(
 
     with pytest.raises(NotFoundError):
         await one_time.mark_oldest_unpaid(COLLECTOR_VK_ID, str(PLAYER_VK_ID))
+
+
+@pytest.mark.asyncio
+async def test_month_visits_shows_who_received_the_payment(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 3)
+    )
+    await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 20)
+    )
+    await one_time.mark_oldest_unpaid(COLLECTOR_VK_ID, str(PLAYER_VK_ID))
+
+    rows = await one_time.month_visits(MonthPeriod(2026, 9))
+    by_date = {row.visit.visit_date: row for row in rows}
+    assert by_date[date(2026, 9, 3)].marked_by_name == 'Иванов Пётр'
+    assert by_date[date(2026, 9, 20)].marked_by_name is None
+
+
+@pytest.mark.asyncio
+async def test_get_visit_returns_row_for_collector(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    row = await one_time.get_visit(COLLECTOR_VK_ID, outcome.visit.id)
+    assert row.visit.id == outcome.visit.id
+    assert row.full_name == 'Петров Олег'
+
+
+@pytest.mark.asyncio
+async def test_get_visit_unknown_id_raises_not_found(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+
+    with pytest.raises(NotFoundError):
+        await one_time.get_visit(COLLECTOR_VK_ID, 999999)
+
+
+@pytest.mark.asyncio
+async def test_set_visit_date_updates_the_visit(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    row = await one_time.set_visit_date(
+        COLLECTOR_VK_ID, outcome.visit.id, date(2026, 9, 10)
+    )
+    assert row.visit.visit_date == date(2026, 9, 10)
+
+
+@pytest.mark.asyncio
+async def test_set_visit_amount_updates_the_visit(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    row = await one_time.set_visit_amount(
+        COLLECTOR_VK_ID, outcome.visit.id, Decimal('400')
+    )
+    assert row.visit.amount == Decimal('400')
+
+
+@pytest.mark.asyncio
+async def test_set_visit_amount_rejects_negative(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    with pytest.raises(ValidationError):
+        await one_time.set_visit_amount(
+            COLLECTOR_VK_ID, outcome.visit.id, Decimal('-1')
+        )
+
+
+@pytest.mark.asyncio
+async def test_set_visit_status_toggles_paid_and_unpaid(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    paid = await one_time.set_visit_status(
+        COLLECTOR_VK_ID, outcome.visit.id, True
+    )
+    assert paid.visit.status is PaymentStatus.PAID
+    assert paid.visit.marked_by_vk_id == COLLECTOR_VK_ID
+    assert paid.marked_by_name == 'Иванов Пётр'
+
+    unpaid = await one_time.set_visit_status(
+        COLLECTOR_VK_ID, outcome.visit.id, False
+    )
+    assert unpaid.visit.status is PaymentStatus.UNPAID
+    assert unpaid.visit.marked_by_vk_id is None
+    assert unpaid.marked_by_name is None
+
+
+@pytest.mark.asyncio
+async def test_set_visit_marked_by_updates_receiver_and_marks_paid(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+    assert outcome.visit.status is PaymentStatus.UNPAID
+
+    row = await one_time.set_visit_marked_by(
+        COLLECTOR_VK_ID, outcome.visit.id, str(COLLECTOR_VK_ID)
+    )
+    # Указание получателя на неоплаченном визите переводит его в «оплачено».
+    assert row.visit.status is PaymentStatus.PAID
+    assert row.visit.marked_by_vk_id == COLLECTOR_VK_ID
+    assert row.marked_by_name == 'Иванов Пётр'
+    first_marked_at = row.visit.marked_at
+    assert first_marked_at is not None
+
+    # На уже оплаченном визите меняется только получатель, не время приёма.
+    row2 = await one_time.set_visit_marked_by(
+        COLLECTOR_VK_ID, outcome.visit.id, 'петров'
+    )
+    assert row2.visit.marked_by_vk_id == PLAYER_VK_ID
+    assert row2.marked_by_name == 'Петров Олег'
+    # SQLite не хранит tzinfo — сравниваем момент времени без него.
+    assert row2.visit.marked_at.replace(tzinfo=None) == (
+        first_marked_at.replace(tzinfo=None)
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_visit_marked_by_unknown_target_raises_not_found(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    with pytest.raises(NotFoundError):
+        await one_time.set_visit_marked_by(
+            COLLECTOR_VK_ID, outcome.visit.id, '999999'
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_visit_removes_the_record(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    await one_time.delete_visit(COLLECTOR_VK_ID, outcome.visit.id)
+
+    with pytest.raises(NotFoundError):
+        await one_time.get_visit(COLLECTOR_VK_ID, outcome.visit.id)
+
+
+@pytest.mark.asyncio
+async def test_delete_visit_unknown_id_raises_not_found(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+
+    with pytest.raises(NotFoundError):
+        await one_time.delete_visit(COLLECTOR_VK_ID, 999999)
 
 
 @pytest.mark.parametrize(

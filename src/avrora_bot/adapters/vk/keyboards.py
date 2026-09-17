@@ -164,3 +164,45 @@ def edit_user_fields() -> str:
         )
     )
     return kb.get_json()
+
+
+def edit_visit_fields() -> str:
+    """Инлайн-кнопки выбора редактируемого поля разового посещения."""
+    kb = (
+        Keyboard(inline=True)
+        .add(Text('Дата', payload={'cmd': 'edit_visit_field', 'field': 'date'}))
+        .add(
+            Text(
+                'Сумма',
+                payload={'cmd': 'edit_visit_field', 'field': 'amount'},
+            )
+        )
+        .row()
+        .add(
+            Text(
+                'Кто принял',
+                payload={'cmd': 'edit_visit_field', 'field': 'marked_by'},
+            )
+        )
+        .row()
+        .add(
+            Text(
+                'Оплачено ✅',
+                payload={'cmd': 'edit_visit_field', 'field': 'paid'},
+            ),
+            color=KeyboardButtonColor.POSITIVE,
+        )
+        .add(
+            Text(
+                'Не оплачено ❌',
+                payload={'cmd': 'edit_visit_field', 'field': 'unpaid'},
+            ),
+            color=KeyboardButtonColor.NEGATIVE,
+        )
+        .row()
+        .add(
+            Text('✅ Готово', payload={'cmd': 'edit_visit_done'}),
+            color=KeyboardButtonColor.POSITIVE,
+        )
+    )
+    return kb.get_json()
