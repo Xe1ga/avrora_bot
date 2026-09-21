@@ -180,8 +180,8 @@ def edit_visit_fields() -> str:
         .row()
         .add(
             Text(
-                'Кто принял',
-                payload={'cmd': 'edit_visit_field', 'field': 'marked_by'},
+                'Сборщик оплаты',
+                payload={'cmd': 'edit_visit_field', 'field': 'collector'},
             )
         )
         .row()

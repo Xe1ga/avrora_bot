@@ -65,6 +65,11 @@ async def test_full_subscription_flow(
         r.user.full_name for r in summary.rows if r.status is PaymentStatus.PAID
     }
     assert paid_names == {'A A', 'B B'}
+    by_name = {r.user.full_name: r for r in summary.rows}
+    # Собирал сборщик (101 = A A) — это должно быть видно в сводке.
+    assert by_name['A A'].collector_name == 'A A'
+    assert by_name['B B'].collector_name == 'A A'
+    assert by_name['C C'].collector_name is None  # не оплатил
 
 
 @pytest.mark.asyncio

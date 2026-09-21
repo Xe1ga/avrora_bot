@@ -28,7 +28,7 @@ class VisitRow:
 
     visit: OneTimePayment
     full_name: str
-    marked_by_name: str | None = None
+    collector_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +112,7 @@ class OneTimeUseCases:
             visit = unpaid[0]  # самый старый — первый по возрастанию даты
             visit.status = PaymentStatus.PAID
             visit.marked_at = datetime.now(UTC)
-            visit.marked_by_vk_id = actor_vk_id
+            visit.collector_vk_id = actor_vk_id
             await uow.one_time.update_visit(visit)
             await record_action(
                 uow,
@@ -166,7 +166,7 @@ class OneTimeUseCases:
         def mutate(visit: OneTimePayment) -> None:
             visit.status = PaymentStatus.PAID if paid else PaymentStatus.UNPAID
             visit.marked_at = datetime.now(UTC) if paid else None
-            visit.marked_by_vk_id = actor_vk_id if paid else None
+            visit.collector_vk_id = actor_vk_id if paid else None
 
         return await self._update_visit(
             actor_vk_id,
@@ -176,36 +176,37 @@ class OneTimeUseCases:
             mutate,
         )
 
-    async def set_visit_marked_by(
+    async def set_visit_collector(
         self, actor_vk_id: int, visit_id: int, target: str
     ) -> VisitRow:
-        """Меняет, кто принял оплату разового посещения (marked_by_vk_id).
+        """Меняет сборщика, который фактически собрал оплату (collector_vk_id).
 
-        :param target: vk_id или (часть) ФИО получателя оплаты — см.
+        :param target: vk_id или (часть) ФИО сборщика — см.
             ``application.services.user_lookup.resolve_user``.
 
         Если визит ещё не был отмечен оплаченным, дополнительно переводит
-        его в статус «оплачено» и фиксирует текущее время — указывать,
-        кто принял деньги, для неоплаченного визита не имеет смысла.
-        Если визит уже оплачен, время приёма (``marked_at``) не трогается
-        — меняется только сам получатель (исправление ошибки атрибуции).
+        его в статус «оплачено» и фиксирует текущее время — указывать
+        сборщика для неоплаченного визита не имеет смысла. Если визит уже
+        оплачен, время приёма (``marked_at``) не трогается — меняется
+        только сам сборщик (исправление ошибки атрибуции).
 
-        :raises ValidationError: если получатель — игрок без аккаунта ВК
-            (``marked_by_vk_id`` хранит именно vk_id, а не внутренний id;
-            ``None`` там неотличим от «оплата ещё не принята»).
+        :raises ValidationError: если указанный сборщик — игрок без
+            аккаунта ВК (``collector_vk_id`` хранит именно vk_id, а не
+            внутренний id; ``None`` там неотличим от «оплата ещё не
+            собрана»).
         """
         async with self._uow_factory() as uow:
             await permissions.require_role(
                 uow, self._vk, actor_vk_id, RoleName.COLLECTOR
             )
             visit = await self._get_visit_or_raise(uow, visit_id)
-            receiver = await resolve_user(uow, target)
-            if receiver.vk_id is None:
+            collector = await resolve_user(uow, target)
+            if collector.vk_id is None:
                 raise ValidationError(
-                    f'{receiver.full_name} добавлен(а) без аккаунта ВК — '
-                    'принявшим оплату можно указать только участника с ВК'
+                    f'{collector.full_name} добавлен(а) без аккаунта ВК — '
+                    'сборщиком оплаты можно указать только участника с ВК'
                 )
-            visit.marked_by_vk_id = receiver.vk_id
+            visit.collector_vk_id = collector.vk_id
             if visit.status is not PaymentStatus.PAID:
                 visit.status = PaymentStatus.PAID
                 visit.marked_at = datetime.now(UTC)
@@ -213,8 +214,8 @@ class OneTimeUseCases:
             await record_action(
                 uow,
                 actor_vk_id,
-                'one_time.edit_marked_by',
-                f'visit_id={visit_id} marked_by_vk_id={receiver.vk_id}',
+                'one_time.edit_collector',
+                f'visit_id={visit_id} collector_vk_id={collector.vk_id}',
             )
             await uow.commit()
             return await self._to_row(uow, visit)
@@ -238,8 +239,8 @@ class OneTimeUseCases:
     async def month_visits(self, period: MonthPeriod) -> list[VisitRow]:
         """Список разовых посещений за месяц с именами участников.
 
-        Для оплаченных визитов дополнительно резолвит ``marked_by_vk_id``
-        в ФИО — кому сборщик передал деньги (ТЗ 3.2), чтобы это было
+        Для оплаченных визитов дополнительно резолвит ``collector_vk_id``
+        в ФИО — кто фактически собрал деньги (ТЗ 3.2), чтобы это было
         видно прямо в сводке, а не только в журнале действий.
         """
         async with self._uow_factory() as uow:
@@ -280,14 +281,14 @@ class OneTimeUseCases:
     async def _to_row(uow: UnitOfWork, visit: OneTimePayment) -> VisitRow:
         user = await uow.users.get_by_id(visit.user_id)
         name = user.full_name if user else f'id{visit.user_id}'
-        marked_by_name = None
-        if visit.marked_by_vk_id is not None:
-            marker = await uow.users.get_by_vk_id(visit.marked_by_vk_id)
-            marked_by_name = (
-                marker.full_name
-                if marker
-                else vk_id_label(visit.marked_by_vk_id)
+        collector_name = None
+        if visit.collector_vk_id is not None:
+            collector = await uow.users.get_by_vk_id(visit.collector_vk_id)
+            collector_name = (
+                collector.full_name
+                if collector
+                else vk_id_label(visit.collector_vk_id)
             )
         return VisitRow(
-            visit=visit, full_name=name, marked_by_name=marked_by_name
+            visit=visit, full_name=name, collector_name=collector_name
         )

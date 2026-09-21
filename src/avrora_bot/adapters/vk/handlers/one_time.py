@@ -26,7 +26,7 @@ _ONE_TIME_HELP_TEXT = (
     '• «разовое оплатил <vk_id или ФИО>» — отметить оплаченным самое '
     'старое неоплаченное посещение участника\n'
     '• «редактировать оплату <id>» — изменить дату/сумму/статус/'
-    'получателя оплаты (кнопками)\n'
+    'сборщика оплаты (кнопками)\n'
     '• «удалить оплату <id>» — удалить запись о посещении\n\n'
     'Вместо vk_id можно указать фамилию, «Фамилия Имя» или полное ФИО — '
     'если совпадений несколько, бот покажет список для уточнения.'
@@ -44,10 +44,10 @@ _VISIT_FIELD_PROMPTS: dict[str, tuple[str, str]] = {
         'Текущая сумма: {value} ₽\nВведите новую сумму:',
         OneTimePaymentEditState.AMOUNT,
     ),
-    'marked_by': (
-        'Сейчас принял: {value}\n'
-        'Введите vk_id или ФИО того, кто принял оплату:',
-        OneTimePaymentEditState.MARKED_BY,
+    'collector': (
+        'Сейчас собрал: {value}\n'
+        'Введите vk_id или ФИО сборщика, который собрал оплату:',
+        OneTimePaymentEditState.COLLECTOR,
     ),
 }
 
@@ -92,7 +92,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
             visit_id=row.visit.id,
             date=row.visit.visit_date,
             amount=row.visit.amount,
-            marked_by=row.marked_by_name,
+            collector=row.collector_name,
         )
         await message.answer(
             _format_visit(row), keyboard=keyboards.edit_visit_fields()
@@ -189,8 +189,8 @@ def register(bot: Bot, ctx: BotContext) -> None:
                 f'{row.full_name} '
                 f'({row.visit.amount} ₽) [id {row.visit.id}]'
             )
-            if row.marked_by_name is not None:
-                line += f' — принял: {row.marked_by_name}'
+            if row.collector_name is not None:
+                line += f' — собрал: {row.collector_name}'
             lines.append(line)
         await message.answer('\n'.join(lines))
 
@@ -270,10 +270,10 @@ def register(bot: Bot, ctx: BotContext) -> None:
             return
         await _apply_visit(message, ctx.one_time.set_visit_amount, amount)
 
-    @bot.on.message(state=OneTimePaymentEditState.MARKED_BY)
-    async def step_visit_marked_by(message: Message) -> None:
+    @bot.on.message(state=OneTimePaymentEditState.COLLECTOR)
+    async def step_visit_collector(message: Message) -> None:
         await _apply_visit(
-            message, ctx.one_time.set_visit_marked_by, message.text.strip()
+            message, ctx.one_time.set_visit_collector, message.text.strip()
         )
 
     @bot.on.message(payload={'cmd': 'edit_visit_done'})
@@ -332,7 +332,7 @@ def _format_visit(row: VisitRow) -> str:
         f'Сумма: {row.visit.amount} ₽',
         f'Статус: {mark}',
     ]
-    lines.append(f'Принял: {row.marked_by_name or "—"}')
+    lines.append(f'Собрал: {row.collector_name or "—"}')
     lines.append('')
     lines.append('Выберите, что изменить:')
     return '\n'.join(lines)

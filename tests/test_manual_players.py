@@ -167,15 +167,15 @@ async def test_manual_player_tracked_in_one_time_visits(
 
     paid = await one_time.mark_oldest_unpaid(COLLECTOR_VK_ID, 'Петров Олег')
     assert paid.visit.status is PaymentStatus.PAID
-    assert paid.visit.marked_by_vk_id == COLLECTOR_VK_ID  # принял сборщик
+    assert paid.visit.collector_vk_id == COLLECTOR_VK_ID  # собрал сборщик
 
 
 @pytest.mark.asyncio
-async def test_manual_player_cannot_be_recorded_as_payment_receiver(
+async def test_manual_player_cannot_be_recorded_as_payment_collector(
     uow_factory: Callable[[], UnitOfWork],
 ) -> None:
-    """marked_by_vk_id хранит vk_id — безВК-игрока так не отличить от «не
-    принято», поэтому назначать его получателем оплаты запрещено явно."""
+    """collector_vk_id хранит vk_id — безВК-игрока так не отличить от «не
+    собрано», поэтому назначать его сборщиком оплаты запрещено явно."""
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     reg, _ = await _prepare(uow_factory, vk)
     await reg.admin_add_player_without_vk(ADMIN_VK_ID, 'Петров Олег')
@@ -186,6 +186,6 @@ async def test_manual_player_cannot_be_recorded_as_payment_receiver(
     )
 
     with pytest.raises(ValidationError):
-        await one_time.set_visit_marked_by(
+        await one_time.set_visit_collector(
             COLLECTOR_VK_ID, outcome.visit.id, 'Петров Олег'
         )

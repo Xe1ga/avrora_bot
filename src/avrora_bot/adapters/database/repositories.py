@@ -99,7 +99,7 @@ def _sub_payment_to_domain(
         user_id=row.user_id,
         status=PaymentStatus(row.status),
         marked_at=row.marked_at,
-        marked_by_vk_id=row.marked_by_vk_id,
+        collector_vk_id=row.collector_vk_id,
     )
 
 
@@ -111,7 +111,7 @@ def _one_time_to_domain(row: m.OneTimePayment) -> e.OneTimePayment:
         amount=row.amount,
         status=PaymentStatus(row.status),
         marked_at=row.marked_at,
-        marked_by_vk_id=row.marked_by_vk_id,
+        collector_vk_id=row.collector_vk_id,
     )
 
 
@@ -392,7 +392,7 @@ class SqlSubscriptionRepository:
             user_id=payment.user_id,
             status=payment.status,
             marked_at=payment.marked_at,
-            marked_by_vk_id=payment.marked_by_vk_id,
+            collector_vk_id=payment.collector_vk_id,
         )
         self._s.add(row)
         await self._s.flush()
@@ -425,7 +425,7 @@ class SqlSubscriptionRepository:
             return
         row.status = payment.status
         row.marked_at = payment.marked_at
-        row.marked_by_vk_id = payment.marked_by_vk_id
+        row.collector_vk_id = payment.collector_vk_id
         await self._s.flush()
 
     async def delete_payment(self, payment_id: int) -> None:
@@ -448,7 +448,7 @@ class SqlOneTimeRepository:
             amount=visit.amount,
             status=visit.status,
             marked_at=visit.marked_at,
-            marked_by_vk_id=visit.marked_by_vk_id,
+            collector_vk_id=visit.collector_vk_id,
         )
         self._s.add(row)
         await self._s.flush()
@@ -465,7 +465,7 @@ class SqlOneTimeRepository:
         row.status = visit.status
         row.amount = visit.amount
         row.marked_at = visit.marked_at
-        row.marked_by_vk_id = visit.marked_by_vk_id
+        row.collector_vk_id = visit.collector_vk_id
         await self._s.flush()
 
     async def visits_in_month(

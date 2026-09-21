@@ -15,6 +15,7 @@ from avrora_bot.application.services.action_log import record_action
 from avrora_bot.application.services.user_lookup import (
     resolve_user,
     resolve_users,
+    vk_id_label,
 )
 from avrora_bot.domain.entities import Subscription, SubscriptionPayment, User
 from avrora_bot.domain.enums import PaymentStatus, RoleName, TariffKind
@@ -44,6 +45,7 @@ class PaymentRow:
 
     user: User
     status: PaymentStatus
+    collector_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,7 +228,7 @@ class SubscriptionUseCases:
                 PaymentStatus.PAID if paid else PaymentStatus.UNPAID
             )
             payment.marked_at = datetime.now(UTC) if paid else None
-            payment.marked_by_vk_id = actor_vk_id if paid else None
+            payment.collector_vk_id = actor_vk_id if paid else None
             await uow.subscriptions.update_payment(payment)
             await record_action(
                 uow,
@@ -332,7 +334,12 @@ class SubscriptionUseCases:
             return VoterChange(subscription=subscription, user=user)
 
     async def month_summary(self, period: MonthPeriod) -> MonthSummary:
-        """Строит сводку по месяцу (для отчётов)."""
+        """Строит сводку по месяцу (для отчётов и списка в «Абонементах»).
+
+        Для оплаченных строк дополнительно резолвит ``collector_vk_id`` в
+        ФИО — кто фактически собрал деньги (ТЗ 3.2), как и в разовых
+        посещениях (``OneTimeUseCases.month_visits``).
+        """
         async with self._uow_factory() as uow:
             subscription = await uow.subscriptions.get_for_month(period)
             if subscription is None:
@@ -341,8 +348,25 @@ class SubscriptionUseCases:
             rows: list[PaymentRow] = []
             for payment in payments:
                 user = await uow.users.get_by_id(payment.user_id)
-                if user is not None:
-                    rows.append(PaymentRow(user=user, status=payment.status))
+                if user is None:
+                    continue
+                collector_name = None
+                if payment.collector_vk_id is not None:
+                    collector = await uow.users.get_by_vk_id(
+                        payment.collector_vk_id
+                    )
+                    collector_name = (
+                        collector.full_name
+                        if collector
+                        else vk_id_label(payment.collector_vk_id)
+                    )
+                rows.append(
+                    PaymentRow(
+                        user=user,
+                        status=payment.status,
+                        collector_name=collector_name,
+                    )
+                )
             rows.sort(key=lambda r: r.user.full_name)
             return MonthSummary(subscription=subscription, rows=rows)
 

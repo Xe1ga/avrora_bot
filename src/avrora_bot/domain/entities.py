@@ -150,7 +150,9 @@ class SubscriptionPayment:
     user_id: int
     status: PaymentStatus = PaymentStatus.UNPAID
     marked_at: datetime | None = None
-    marked_by_vk_id: int | None = None
+    # vk_id сборщика, который фактически собрал оплату (не всегда тот же,
+    # кто её отметил в боте — см. OneTimeUseCases.set_visit_collector).
+    collector_vk_id: int | None = None
     id: int | None = None
 
 
@@ -163,7 +165,9 @@ class OneTimePayment:
     amount: Decimal
     status: PaymentStatus = PaymentStatus.UNPAID
     marked_at: datetime | None = None
-    marked_by_vk_id: int | None = None
+    # vk_id сборщика, который фактически собрал оплату (не всегда тот же,
+    # кто её отметил в боте — см. OneTimeUseCases.set_visit_collector).
+    collector_vk_id: int | None = None
     id: int | None = None
 
 

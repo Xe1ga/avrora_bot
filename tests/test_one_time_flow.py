@@ -173,8 +173,8 @@ async def test_month_visits_shows_who_received_the_payment(
 
     rows = await one_time.month_visits(MonthPeriod(2026, 9))
     by_date = {row.visit.visit_date: row for row in rows}
-    assert by_date[date(2026, 9, 3)].marked_by_name == 'Иванов Пётр'
-    assert by_date[date(2026, 9, 20)].marked_by_name is None
+    assert by_date[date(2026, 9, 3)].collector_name == 'Иванов Пётр'
+    assert by_date[date(2026, 9, 20)].collector_name is None
 
 
 @pytest.mark.asyncio
@@ -265,19 +265,19 @@ async def test_set_visit_status_toggles_paid_and_unpaid(
         COLLECTOR_VK_ID, outcome.visit.id, True
     )
     assert paid.visit.status is PaymentStatus.PAID
-    assert paid.visit.marked_by_vk_id == COLLECTOR_VK_ID
-    assert paid.marked_by_name == 'Иванов Пётр'
+    assert paid.visit.collector_vk_id == COLLECTOR_VK_ID
+    assert paid.collector_name == 'Иванов Пётр'
 
     unpaid = await one_time.set_visit_status(
         COLLECTOR_VK_ID, outcome.visit.id, False
     )
     assert unpaid.visit.status is PaymentStatus.UNPAID
-    assert unpaid.visit.marked_by_vk_id is None
-    assert unpaid.marked_by_name is None
+    assert unpaid.visit.collector_vk_id is None
+    assert unpaid.collector_name is None
 
 
 @pytest.mark.asyncio
-async def test_set_visit_marked_by_updates_receiver_and_marks_paid(
+async def test_set_visit_collector_updates_collector_and_marks_paid(
     uow_factory: Callable[[], UnitOfWork],
 ) -> None:
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
@@ -287,22 +287,22 @@ async def test_set_visit_marked_by_updates_receiver_and_marks_paid(
     )
     assert outcome.visit.status is PaymentStatus.UNPAID
 
-    row = await one_time.set_visit_marked_by(
+    row = await one_time.set_visit_collector(
         COLLECTOR_VK_ID, outcome.visit.id, str(COLLECTOR_VK_ID)
     )
     # Указание получателя на неоплаченном визите переводит его в «оплачено».
     assert row.visit.status is PaymentStatus.PAID
-    assert row.visit.marked_by_vk_id == COLLECTOR_VK_ID
-    assert row.marked_by_name == 'Иванов Пётр'
+    assert row.visit.collector_vk_id == COLLECTOR_VK_ID
+    assert row.collector_name == 'Иванов Пётр'
     first_marked_at = row.visit.marked_at
     assert first_marked_at is not None
 
     # На уже оплаченном визите меняется только получатель, не время приёма.
-    row2 = await one_time.set_visit_marked_by(
+    row2 = await one_time.set_visit_collector(
         COLLECTOR_VK_ID, outcome.visit.id, 'петров'
     )
-    assert row2.visit.marked_by_vk_id == PLAYER_VK_ID
-    assert row2.marked_by_name == 'Петров Олег'
+    assert row2.visit.collector_vk_id == PLAYER_VK_ID
+    assert row2.collector_name == 'Петров Олег'
     # SQLite не хранит tzinfo — сравниваем момент времени без него.
     assert row2.visit.marked_at.replace(tzinfo=None) == (
         first_marked_at.replace(tzinfo=None)
@@ -310,7 +310,7 @@ async def test_set_visit_marked_by_updates_receiver_and_marks_paid(
 
 
 @pytest.mark.asyncio
-async def test_set_visit_marked_by_unknown_target_raises_not_found(
+async def test_set_visit_collector_unknown_target_raises_not_found(
     uow_factory: Callable[[], UnitOfWork],
 ) -> None:
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
@@ -320,7 +320,7 @@ async def test_set_visit_marked_by_unknown_target_raises_not_found(
     )
 
     with pytest.raises(NotFoundError):
-        await one_time.set_visit_marked_by(
+        await one_time.set_visit_collector(
             COLLECTOR_VK_ID, outcome.visit.id, '999999'
         )
 

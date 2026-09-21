@@ -9,7 +9,7 @@ from avrora_bot.adapters.vk.handlers import helpers
 from avrora_bot.adapters.vk.states import SubscriptionState
 from avrora_bot.application.services.permissions import has_access
 from avrora_bot.application.services.user_lookup import vk_id_label
-from avrora_bot.domain.enums import RoleName
+from avrora_bot.domain.enums import PaymentStatus, RoleName
 from avrora_bot.domain.errors import DomainError
 
 _SUBSCRIPTIONS_HELP_TEXT = (
@@ -25,7 +25,9 @@ _SUBSCRIPTIONS_HELP_TEXT = (
     '• «убрать голос <период> <vk_id или ФИО>» — убрать участника из '
     'списка\n'
     '• «оплатил <период> <vk_id или ФИО>» / «не оплатил <период> '
-    '<vk_id или ФИО>» — отметить оплату\n\n'
+    '<vk_id или ФИО>» — отметить оплату\n'
+    '• «абонементы <период>» — список участников за месяц: оплатил/не '
+    'оплатил, кто собрал\n\n'
     'Вместо vk_id можно указать фамилию, «Фамилия Имя» или полное ФИО — '
     'если совпадений несколько, бот покажет список для уточнения.'
 )
@@ -168,6 +170,31 @@ def register(bot: Bot, ctx: BotContext) -> None:
     @bot.on.message(text=['не оплатил <period> <target>'])
     async def mark_unpaid(message: Message, period: str, target: str) -> None:
         await _mark(ctx, message, period, target, paid=False)
+
+    @bot.on.message(text=['абонементы <period>'])
+    async def list_payments(message: Message, period: str) -> None:
+        try:
+            month = helpers.parse_period(period)
+            summary = await ctx.subscriptions.month_summary(month)
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        lines = [f'Абонементы за {month.label()}:', '']
+        for row in summary.rows:
+            mark = '✅' if row.status is PaymentStatus.PAID else '❌'
+            line = f'{mark} {row.user.full_name}'
+            if row.collector_name is not None:
+                line += f' — собрал: {row.collector_name}'
+            lines.append(line)
+        lines.append('')
+        lines.extend(
+            [
+                f'Сумма абонемента: {summary.subscription.effective_amount} ₽',
+                f'Оплатили: {summary.paid_count} из {len(summary.rows)}',
+                f'Собрано: {summary.collected} ₽',
+            ]
+        )
+        await message.answer('\n'.join(lines))
 
     @bot.on.message(payload={'cmd': 'subscriptions_help'})
     async def subscriptions_help(message: Message) -> None:

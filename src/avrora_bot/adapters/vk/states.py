@@ -64,4 +64,4 @@ class OneTimePaymentEditState(BaseStateGroup):
     SELECT_FIELD = 'one_time_edit:select_field'
     DATE = 'one_time_edit:date'
     AMOUNT = 'one_time_edit:amount'
-    MARKED_BY = 'one_time_edit:marked_by'
+    COLLECTOR = 'one_time_edit:collector'

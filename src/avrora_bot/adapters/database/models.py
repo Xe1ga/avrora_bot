@@ -314,7 +314,10 @@ class SubscriptionPayment(Base):
     marked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    marked_by_vk_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # vk_id сборщика, который фактически собрал оплату.
+    collector_vk_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
 
     subscription: Mapped[Subscription] = relationship(back_populates='payments')
 
@@ -336,7 +339,10 @@ class OneTimePayment(Base):
     marked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    marked_by_vk_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # vk_id сборщика, который фактически собрал оплату.
+    collector_vk_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
 
 
 class CalendarEvent(Base):
