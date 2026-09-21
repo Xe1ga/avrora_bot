@@ -84,9 +84,14 @@ class MonthPeriod:
         """Последний день месяца."""
         return date(self.year, self.month, self.days_in_month)
 
+    @property
+    def month_name(self) -> str:
+        """Название месяца по-русски в именительном падеже ('сентябрь')."""
+        return _MONTH_NAMES_RU[self.month - 1]
+
     def label(self) -> str:
         """Человекочитаемая метка, напр. 'сентябрь 2026'."""
-        return f'{_MONTH_NAMES_RU[self.month - 1]} {self.year}'
+        return f'{self.month_name} {self.year}'
 
     def __str__(self) -> str:
         return f'{self.year:04d}-{self.month:02d}'

@@ -168,6 +168,8 @@ class OneTimePayment:
     # vk_id сборщика, который фактически собрал оплату (не всегда тот же,
     # кто её отметил в боте — см. OneTimeUseCases.set_visit_collector).
     collector_vk_id: int | None = None
+    # Свободное примечание сборщика (колонка «Примечание» отчёта).
+    note: str | None = None
     id: int | None = None
 
 

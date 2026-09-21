@@ -21,6 +21,10 @@ from avrora_bot.domain.value_objects import MonthPeriod
 
 UowFactory = Callable[[], UnitOfWork]
 
+# Ограничение длины примечания — колонка «Примечание» отчёта рассчитана на
+# короткую пометку, а не на пересланное сообщение целиком.
+MAX_NOTE_LEN = 512
+
 
 @dataclass(frozen=True, slots=True)
 class VisitRow:
@@ -174,6 +178,28 @@ class OneTimeUseCases:
             'one_time.edit_status',
             f'paid={paid}',
             mutate,
+        )
+
+    async def set_visit_note(
+        self, actor_vk_id: int, visit_id: int, note: str | None
+    ) -> VisitRow:
+        """Меняет примечание к разовому посещению (``None`` — очистить).
+
+        Примечание — свободный текст сборщика (кто именно заплатил за
+        гостя, ссылка на ВК и т. п.); попадает в колонку «Примечание»
+        XLSX-отчёта и в сводку «разовые <период>».
+        """
+        if note is not None and len(note) > MAX_NOTE_LEN:
+            raise ValidationError(f'Примечание длиннее {MAX_NOTE_LEN} символов')
+        return await self._update_visit(
+            actor_vk_id,
+            visit_id,
+            'one_time.edit_note',
+            # В журнал пишется только факт правки: текст примечания может
+            # содержать персональные данные (ФИО плательщика, ссылку на
+            # профиль), а action_log не шифруется.
+            f'note_set={note is not None}',
+            lambda visit: setattr(visit, 'note', note),
         )
 
     async def set_visit_collector(

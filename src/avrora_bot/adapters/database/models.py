@@ -343,6 +343,10 @@ class OneTimePayment(Base):
     collector_vk_id: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )
+    # Свободное примечание сборщика — колонка «Примечание» отчёта по
+    # разовым посещениям (кто именно заплатил за гостя, ссылка на ВК и
+    # т. п.); заполняется через «редактировать оплату <id>».
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class CalendarEvent(Base):

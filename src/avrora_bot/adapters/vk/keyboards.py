@@ -112,6 +112,20 @@ def schedule_link(url: str) -> str:
     return kb.get_json()
 
 
+def one_time_report() -> str:
+    """Инлайн-кнопка запуска XLSX-отчёта по разовым посещениям.
+
+    Идёт под справкой раздела «Разовые посещения»: по нажатию бот
+    отдельным сообщением спрашивает месяц (см. ``OneTimeReportState``) —
+    то же самое делает текстовая команда «разовые отчёт <период>».
+    """
+    kb = Keyboard(inline=True).add(
+        Text('📊 Отчёт xlsx', payload={'cmd': 'one_time_report'}),
+        color=KeyboardButtonColor.PRIMARY,
+    )
+    return kb.get_json()
+
+
 def cancel() -> str:
     """Клавиатура с единственной кнопкой отмены."""
     kb = Keyboard(one_time=True).add(
@@ -182,6 +196,12 @@ def edit_visit_fields() -> str:
             Text(
                 'Сборщик оплаты',
                 payload={'cmd': 'edit_visit_field', 'field': 'collector'},
+            )
+        )
+        .add(
+            Text(
+                'Примечание',
+                payload={'cmd': 'edit_visit_field', 'field': 'note'},
             )
         )
         .row()

@@ -44,7 +44,7 @@ def register_handlers(
     admin.register(bot, ctx)
     players.register(bot, ctx)
     subscriptions.register(bot, ctx)
-    one_time.register(bot, ctx)
+    one_time.register(bot, ctx, gateway, report_dir)
     calendar.register(bot, ctx)
     reports.register(bot, ctx, gateway, report_dir)
     common.register(bot, ctx, schedule_url=schedule_url)

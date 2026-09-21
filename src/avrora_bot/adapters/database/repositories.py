@@ -112,6 +112,7 @@ def _one_time_to_domain(row: m.OneTimePayment) -> e.OneTimePayment:
         status=PaymentStatus(row.status),
         marked_at=row.marked_at,
         collector_vk_id=row.collector_vk_id,
+        note=row.note,
     )
 
 
@@ -449,6 +450,7 @@ class SqlOneTimeRepository:
             status=visit.status,
             marked_at=visit.marked_at,
             collector_vk_id=visit.collector_vk_id,
+            note=visit.note,
         )
         self._s.add(row)
         await self._s.flush()
@@ -462,10 +464,12 @@ class SqlOneTimeRepository:
         row = await self._s.get(m.OneTimePayment, visit.id)
         if row is None:
             return
+        row.visit_date = visit.visit_date
         row.status = visit.status
         row.amount = visit.amount
         row.marked_at = visit.marked_at
         row.collector_vk_id = visit.collector_vk_id
+        row.note = visit.note
         await self._s.flush()
 
     async def visits_in_month(

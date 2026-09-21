@@ -65,3 +65,15 @@ class OneTimePaymentEditState(BaseStateGroup):
     DATE = 'one_time_edit:date'
     AMOUNT = 'one_time_edit:amount'
     COLLECTOR = 'one_time_edit:collector'
+    NOTE = 'one_time_edit:note'
+
+
+class OneTimeReportState(BaseStateGroup):
+    """Запрос периода для XLSX-отчёта по разовым посещениям (ТЗ 3.2 п.4).
+
+    Отдельный префикс ``one_time_report:`` — как у остальных групп; месяц
+    спрашивается отдельным сообщением после нажатия кнопки «Отчёт xlsx»
+    в разделе «Разовые посещения», см. handlers/one_time.py.
+    """
+
+    PERIOD = 'one_time_report:period'

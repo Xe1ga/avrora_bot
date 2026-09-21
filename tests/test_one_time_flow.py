@@ -8,7 +8,10 @@ import pytest
 
 from avrora_bot.adapters.database.seed import seed_reference_data
 from avrora_bot.adapters.vk.handlers import helpers
-from avrora_bot.application.use_cases.one_time import OneTimeUseCases
+from avrora_bot.application.use_cases.one_time import (
+    MAX_NOTE_LEN,
+    OneTimeUseCases,
+)
 from avrora_bot.application.use_cases.registration import (
     RegistrationData,
     RegistrationUseCases,
@@ -274,6 +277,83 @@ async def test_set_visit_status_toggles_paid_and_unpaid(
     assert unpaid.visit.status is PaymentStatus.UNPAID
     assert unpaid.visit.collector_vk_id is None
     assert unpaid.collector_name is None
+
+
+@pytest.mark.asyncio
+async def test_set_visit_note_is_stored_and_cleared(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+    assert outcome.visit.note is None
+
+    row = await one_time.set_visit_note(
+        COLLECTOR_VK_ID, outcome.visit.id, 'Платила Александра Викторовна З.'
+    )
+    assert row.visit.note == 'Платила Александра Викторовна З.'
+
+    # Примечание должно пережить перечитывание из БД.
+    reread = await one_time.get_visit(COLLECTOR_VK_ID, outcome.visit.id)
+    assert reread.visit.note == 'Платила Александра Викторовна З.'
+
+    cleared = await one_time.set_visit_note(
+        COLLECTOR_VK_ID, outcome.visit.id, None
+    )
+    assert cleared.visit.note is None
+
+
+@pytest.mark.asyncio
+async def test_set_visit_note_rejects_too_long_text(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    with pytest.raises(ValidationError):
+        await one_time.set_visit_note(
+            COLLECTOR_VK_ID, outcome.visit.id, 'x' * (MAX_NOTE_LEN + 1)
+        )
+
+
+@pytest.mark.asyncio
+async def test_month_visits_returns_notes(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+    await one_time.set_visit_note(
+        COLLECTOR_VK_ID, outcome.visit.id, 'Заплатил за гостя'
+    )
+
+    [row] = await one_time.month_visits(MonthPeriod(2026, 9))
+    assert row.visit.note == 'Заплатил за гостя'
+
+
+@pytest.mark.asyncio
+async def test_set_visit_date_is_persisted(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    await one_time.set_visit_date(
+        COLLECTOR_VK_ID, outcome.visit.id, date(2026, 9, 10)
+    )
+
+    reread = await one_time.get_visit(COLLECTOR_VK_ID, outcome.visit.id)
+    assert reread.visit.visit_date == date(2026, 9, 10)
 
 
 @pytest.mark.asyncio

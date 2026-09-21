@@ -1,19 +1,27 @@
 """Хендлеры разовых посещений и тарифа (ТЗ 3.2 п.4)."""
 
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 from vkbottle import Bot
 from vkbottle.bot import Message
 
+from avrora_bot.adapters.reports.one_time_xlsx import build_one_time_report
 from avrora_bot.adapters.vk import keyboards
 from avrora_bot.adapters.vk.context import BotContext
+from avrora_bot.adapters.vk.gateway import VkbottleGateway
 from avrora_bot.adapters.vk.handlers import helpers
-from avrora_bot.adapters.vk.states import OneTimePaymentEditState, OneTimeState
+from avrora_bot.adapters.vk.states import (
+    OneTimePaymentEditState,
+    OneTimeReportState,
+    OneTimeState,
+)
 from avrora_bot.application.services.permissions import has_access
 from avrora_bot.application.services.user_lookup import vk_id_label
 from avrora_bot.application.use_cases.one_time import VisitRow
 from avrora_bot.domain.enums import PaymentStatus, RoleName, TariffKind
 from avrora_bot.domain.errors import DomainError
+from avrora_bot.domain.value_objects import MonthPeriod
 
 _ONE_TIME_HELP_TEXT = (
     '🎫 Разовые посещения:\n\n'
@@ -23,10 +31,13 @@ _ONE_TIME_HELP_TEXT = (
     '  Дата ДД.ММ.ГГГГ, по умолчанию — сегодня\n'
     '• «разовые <период>» — список посещений за месяц.\n'
     '  Пример: разовые 2026-09\n'
+    '• «разовые отчёт <период>» — отчёт за месяц файлом XLSX '
+    '(или кнопка «📊 Отчёт xlsx» ниже).\n'
+    '  Пример: разовые отчёт 2026-09\n'
     '• «разовое оплатил <vk_id или ФИО>» — отметить оплаченным самое '
     'старое неоплаченное посещение участника\n'
     '• «редактировать оплату <id>» — изменить дату/сумму/статус/'
-    'сборщика оплаты (кнопками)\n'
+    'сборщика оплаты/примечание (кнопками)\n'
     '• «удалить оплату <id>» — удалить запись о посещении\n\n'
     'Вместо vk_id можно указать фамилию, «Фамилия Имя» или полное ФИО — '
     'если совпадений несколько, бот покажет список для уточнения.'
@@ -49,11 +60,24 @@ _VISIT_FIELD_PROMPTS: dict[str, tuple[str, str]] = {
         'Введите vk_id или ФИО сборщика, который собрал оплату:',
         OneTimePaymentEditState.COLLECTOR,
     ),
+    'note': (
+        'Текущее примечание: {value}\n'
+        'Введите новое примечание («-» — очистить):',
+        OneTimePaymentEditState.NOTE,
+    ),
 }
 
+_PERIOD_PROMPT = 'Введите месяц в формате ГГГГ-ММ, например 2026-09:'
 
-def register(bot: Bot, ctx: BotContext) -> None:
-    """Регистрирует хендлеры разовых посещений."""
+
+def register(
+    bot: Bot, ctx: BotContext, gateway: VkbottleGateway, report_dir: Path
+) -> None:
+    """Регистрирует хендлеры разовых посещений.
+
+    :param gateway: шлюз VK — нужен для отправки XLSX-отчёта документом.
+    :param report_dir: каталог, куда складывается сгенерированный файл.
+    """
     dispenser = bot.state_dispenser
 
     async def _current_state(peer_id: int) -> str | None:
@@ -93,9 +117,27 @@ def register(bot: Bot, ctx: BotContext) -> None:
             date=row.visit.visit_date,
             amount=row.visit.amount,
             collector=row.collector_name,
+            note=row.visit.note,
         )
         await message.answer(
             _format_visit(row), keyboard=keyboards.edit_visit_fields()
+        )
+
+    async def _is_collector(vk_id: int) -> bool:
+        roles = await ctx.user_management.effective_roles(vk_id)
+        return has_access(roles, RoleName.COLLECTOR)
+
+    async def _send_one_time_report(
+        message: Message, month: MonthPeriod
+    ) -> None:
+        """Собирает XLSX по месяцу и отправляет его документом."""
+        rows = await ctx.one_time.month_visits(month)
+        out_path = report_dir / f'one_time_{month}.xlsx'
+        build_one_time_report(month, rows, out_path)
+        await gateway.send_document(
+            peer_id=message.peer_id,
+            file_path=str(out_path),
+            message=f'Разовые посещения за {month.label()}',
         )
 
     async def _apply_visit(message: Message, setter, value: object) -> None:
@@ -170,6 +212,48 @@ def register(bot: Bot, ctx: BotContext) -> None:
         lines.append('Отметить оплату: «разовое оплатил <ФИО>».')
         await message.answer('\n'.join(lines))
 
+    @bot.on.message(payload={'cmd': 'one_time_report'})
+    async def start_one_time_report(message: Message) -> None:
+        if not await _is_collector(message.from_id):
+            await message.answer(
+                '⚠️ Команда доступна только сборщику платежей.'
+            )
+            return
+        # Месяц спрашивается отдельным сообщением — по аналогии со списком
+        # посетивших в «посетили»; та же операция доступна и командой
+        # «разовые отчёт <период>».
+        await dispenser.set(message.peer_id, OneTimeReportState.PERIOD)
+        await message.answer(_PERIOD_PROMPT, keyboard=keyboards.cancel())
+
+    @bot.on.message(state=OneTimeReportState.PERIOD)
+    async def finish_one_time_report(message: Message) -> None:
+        try:
+            month = helpers.parse_period(message.text)
+        except DomainError as exc:
+            await message.answer(
+                f'⚠️ {exc}\n{_PERIOD_PROMPT}', keyboard=keyboards.cancel()
+            )
+            return
+        await dispenser.delete(message.peer_id)
+        await _send_one_time_report(message, month)
+
+    # Регистрируется раньше «разовые <период>»: там период — весь хвост
+    # строки, и «разовые отчёт 2026-09» иначе разобрался бы как период
+    # «отчёт 2026-09».
+    @bot.on.message(text=['разовые отчёт <period>', 'разовые отчет <period>'])
+    async def one_time_report(message: Message, period: str) -> None:
+        if not await _is_collector(message.from_id):
+            await message.answer(
+                '⚠️ Команда доступна только сборщику платежей.'
+            )
+            return
+        try:
+            month = helpers.parse_period(period)
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await _send_one_time_report(message, month)
+
     @bot.on.message(text=['разовые <period>'])
     async def list_visits(message: Message, period: str) -> None:
         try:
@@ -191,6 +275,8 @@ def register(bot: Bot, ctx: BotContext) -> None:
             )
             if row.collector_name is not None:
                 line += f' — собрал: {row.collector_name}'
+            if row.visit.note:
+                line += f' ({row.visit.note})'
             lines.append(line)
         await message.answer('\n'.join(lines))
 
@@ -276,6 +362,15 @@ def register(bot: Bot, ctx: BotContext) -> None:
             message, ctx.one_time.set_visit_collector, message.text.strip()
         )
 
+    @bot.on.message(state=OneTimePaymentEditState.NOTE)
+    async def step_visit_note(message: Message) -> None:
+        # «-» или пустая строка очищают примечание — как в правке профиля.
+        await _apply_visit(
+            message,
+            ctx.one_time.set_visit_note,
+            helpers.parse_optional(message.text),
+        )
+
     @bot.on.message(payload={'cmd': 'edit_visit_done'})
     async def finish_edit_visit(message: Message) -> None:
         # См. комментарий в user_edit.finish_edit о StatePeer.state.__eq__.
@@ -298,11 +393,12 @@ def register(bot: Bot, ctx: BotContext) -> None:
 
     @bot.on.message(payload={'cmd': 'one_time_help'})
     async def one_time_help(message: Message) -> None:
-        roles = await ctx.user_management.effective_roles(message.from_id)
-        if not has_access(roles, RoleName.COLLECTOR):
+        if not await _is_collector(message.from_id):
             await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
-        await message.answer(_ONE_TIME_HELP_TEXT)
+        await message.answer(
+            _ONE_TIME_HELP_TEXT, keyboard=keyboards.one_time_report()
+        )
 
 
 def _payload_field(message: Message) -> str:
@@ -333,6 +429,7 @@ def _format_visit(row: VisitRow) -> str:
         f'Статус: {mark}',
     ]
     lines.append(f'Собрал: {row.collector_name or "—"}')
+    lines.append(f'Примечание: {row.visit.note or "—"}')
     lines.append('')
     lines.append('Выберите, что изменить:')
     return '\n'.join(lines)
