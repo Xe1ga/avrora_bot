@@ -112,16 +112,46 @@ def schedule_link(url: str) -> str:
     return kb.get_json()
 
 
-def one_time_report() -> str:
-    """Инлайн-кнопка запуска XLSX-отчёта по разовым посещениям.
+def one_time_actions() -> str:
+    """Инлайн-кнопки действий раздела «Разовые посещения».
 
-    Идёт под справкой раздела «Разовые посещения»: по нажатию бот
-    отдельным сообщением спрашивает месяц (см. ``OneTimeReportState``) —
-    то же самое делает текстовая команда «разовые отчёт <период>».
+    Идут под справкой раздела: каждая кнопка запускает диалог, в котором
+    бот отдельным сообщением спрашивает недостающее (дату, участника,
+    месяц) — то же делают текстовые команды «посетили [дата]»,
+    «разовое оплатил <ФИО>» и «разовые отчёт <период>». «Отчёт в чат»
+    ничего не спрашивает: сразу выводит список за текущий месяц, как
+    команда «разовые <текущий месяц>».
     """
-    kb = Keyboard(inline=True).add(
-        Text('📊 Отчёт xlsx', payload={'cmd': 'one_time_report'}),
-        color=KeyboardButtonColor.PRIMARY,
+    kb = (
+        Keyboard(inline=True)
+        .add(Text('🎫 Посетили', payload={'cmd': 'one_time_visited'}))
+        .add(
+            Text('💵 Оплатил', payload={'cmd': 'one_time_paid'}),
+            color=KeyboardButtonColor.POSITIVE,
+        )
+        .row()
+        .add(Text('💬 Отчёт в чат', payload={'cmd': 'one_time_chat'}))
+        .add(
+            Text('📊 Отчёт xlsx', payload={'cmd': 'one_time_report'}),
+            color=KeyboardButtonColor.PRIMARY,
+        )
+    )
+    return kb.get_json()
+
+
+def visit_date_prompt() -> str:
+    """Клавиатура шага «дата посещения»: «Сегодня» и «Отмена».
+
+    Текст кнопки «Сегодня» разбирает ``helpers.parse_visit_date`` — это
+    обычное сообщение, отдельный хендлер кнопке не нужен.
+    """
+    kb = (
+        Keyboard(one_time=True)
+        .add(Text('Сегодня', payload={'cmd': 'one_time_visit_today'}))
+        .add(
+            Text('Отмена', payload={'cmd': 'cancel'}),
+            color=KeyboardButtonColor.NEGATIVE,
+        )
     )
     return kb.get_json()
 

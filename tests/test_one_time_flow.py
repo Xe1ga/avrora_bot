@@ -18,7 +18,11 @@ from avrora_bot.application.use_cases.registration import (
 )
 from avrora_bot.application.use_cases.roles import RoleUseCases
 from avrora_bot.domain.enums import PaymentStatus, RoleName
-from avrora_bot.domain.errors import NotFoundError, ValidationError
+from avrora_bot.domain.errors import (
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from avrora_bot.domain.ports.uow import UnitOfWork
 from avrora_bot.domain.value_objects import MonthPeriod
 from tests.conftest import FakeVkGateway
@@ -52,7 +56,9 @@ async def test_register_visits_resolves_targets_by_vk_id_and_name(
 ) -> None:
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     reg, one_time = await _prepare(uow_factory, vk)
-    await reg.self_register(RegistrationData(vk_id=103, full_name='Сидоров Лев'))
+    await reg.self_register(
+        RegistrationData(vk_id=103, full_name='Сидоров Лев')
+    )
     await reg.approve(ADMIN_VK_ID, 103)
 
     outcomes = await one_time.register_visits(
@@ -118,7 +124,9 @@ async def test_register_visits_ambiguous_name_raises_validation_error(
 ) -> None:
     vk = FakeVkGateway(admins={ADMIN_VK_ID})
     reg, one_time = await _prepare(uow_factory, vk)
-    await reg.self_register(RegistrationData(vk_id=103, full_name='Петров Иван'))
+    await reg.self_register(
+        RegistrationData(vk_id=103, full_name='Петров Иван')
+    )
     await reg.approve(ADMIN_VK_ID, 103)
 
     with pytest.raises(ValidationError):
@@ -174,7 +182,7 @@ async def test_month_visits_shows_who_received_the_payment(
     )
     await one_time.mark_oldest_unpaid(COLLECTOR_VK_ID, str(PLAYER_VK_ID))
 
-    rows = await one_time.month_visits(MonthPeriod(2026, 9))
+    rows = await one_time.month_visits(COLLECTOR_VK_ID, MonthPeriod(2026, 9))
     by_date = {row.visit.visit_date: row for row in rows}
     assert by_date[date(2026, 9, 3)].collector_name == 'Иванов Пётр'
     assert by_date[date(2026, 9, 20)].collector_name is None
@@ -334,7 +342,7 @@ async def test_month_visits_returns_notes(
         COLLECTOR_VK_ID, outcome.visit.id, 'Заплатил за гостя'
     )
 
-    [row] = await one_time.month_visits(MonthPeriod(2026, 9))
+    [row] = await one_time.month_visits(COLLECTOR_VK_ID, MonthPeriod(2026, 9))
     assert row.visit.note == 'Заплатил за гостя'
 
 
@@ -448,3 +456,99 @@ def test_parse_targets(raw: str, expected: list[str]) -> None:
 def test_parse_targets_rejects_empty_list() -> None:
     with pytest.raises(ValidationError):
         helpers.parse_targets('   \n,  ')
+
+
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [
+        ('05.09.2026', date(2026, 9, 5)),
+        ('  05.09.2026 ', date(2026, 9, 5)),
+        ('сегодня', date(2026, 9, 21)),
+        ('Сегодня', date(2026, 9, 21)),
+        ('', date(2026, 9, 21)),
+    ],
+)
+def test_parse_visit_date(raw: str, expected: date) -> None:
+    assert helpers.parse_visit_date(raw, date(2026, 9, 21)) == expected
+
+
+def test_parse_visit_date_rejects_garbage() -> None:
+    with pytest.raises(ValidationError):
+        helpers.parse_visit_date('вчера', date(2026, 9, 21))
+
+
+def test_split_message_keeps_short_text_whole() -> None:
+    assert helpers.split_message('a\nb\nc', limit=100) == ['a\nb\nc']
+
+
+def test_split_message_cuts_only_on_line_boundaries() -> None:
+    text = '\n'.join(['x' * 10] * 5)  # 5 строк по 10 символов
+    parts = helpers.split_message(text, limit=25)
+
+    assert parts == [
+        'x' * 10 + '\n' + 'x' * 10,
+        'x' * 10 + '\n' + 'x' * 10,
+        'x' * 10,
+    ]
+    assert '\n'.join(parts) == text
+    assert all(len(part) <= 25 for part in parts)
+
+
+def test_split_message_oversized_line_is_kept_as_is() -> None:
+    parts = helpers.split_message('short\n' + 'y' * 50 + '\nend', limit=20)
+
+    assert parts == ['short', 'y' * 50, 'end']
+
+
+@pytest.mark.asyncio
+async def test_month_visits_denied_for_non_collector(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+
+    # Обычный игрок (одобрен, но без роли сборщика) не видит список.
+    with pytest.raises(PermissionDeniedError):
+        await one_time.month_visits(PLAYER_VK_ID, MonthPeriod(2026, 9))
+    # Незнакомый пользователь — тоже.
+    with pytest.raises(PermissionDeniedError):
+        await one_time.month_visits(999_999, MonthPeriod(2026, 9))
+    # Администратору доступно всё (ТЗ 2).
+    rows = await one_time.month_visits(ADMIN_VK_ID, MonthPeriod(2026, 9))
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_every_one_time_action_is_denied_for_non_collector(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    _, one_time = await _prepare(uow_factory, vk)
+    [outcome] = await one_time.register_visits(
+        COLLECTOR_VK_ID, [str(PLAYER_VK_ID)], date(2026, 9, 5)
+    )
+    visit_id = outcome.visit.id
+    actions = [
+        one_time.register_visits(PLAYER_VK_ID, ['102'], date(2026, 9, 6)),
+        one_time.mark_oldest_unpaid(PLAYER_VK_ID, str(PLAYER_VK_ID)),
+        one_time.get_visit(PLAYER_VK_ID, visit_id),
+        one_time.set_visit_date(PLAYER_VK_ID, visit_id, date(2026, 9, 7)),
+        one_time.set_visit_amount(PLAYER_VK_ID, visit_id, Decimal('1')),
+        one_time.set_visit_status(PLAYER_VK_ID, visit_id, True),
+        one_time.set_visit_note(PLAYER_VK_ID, visit_id, 'x'),
+        one_time.set_visit_collector(PLAYER_VK_ID, visit_id, '101'),
+        one_time.delete_visit(PLAYER_VK_ID, visit_id),
+        one_time.month_visits(PLAYER_VK_ID, MonthPeriod(2026, 9)),
+    ]
+    for action in actions:
+        with pytest.raises(PermissionDeniedError):
+            await action
+
+    # Ничего не изменилось.
+    row = await one_time.get_visit(COLLECTOR_VK_ID, visit_id)
+    assert row.visit.visit_date == date(2026, 9, 5)
+    assert row.visit.status is PaymentStatus.UNPAID
+    assert row.visit.note is None

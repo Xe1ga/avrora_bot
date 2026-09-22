@@ -26,16 +26,18 @@ from avrora_bot.domain.value_objects import MonthPeriod
 _ONE_TIME_HELP_TEXT = (
     '🎫 Разовые посещения:\n\n'
     '• «разовый тариф <сумма>» — изменить тариф разового посещения\n'
-    '• «посетили [дата]» — зафиксировать посещение; бот отдельным '
-    'сообщением запросит список vk_id/ФИО посетивших\n'
+    '• «посетили [дата]» (кнопка «🎫 Посетили») — зафиксировать '
+    'посещение; бот отдельным сообщением запросит список vk_id/ФИО '
+    'посетивших\n'
     '  Дата ДД.ММ.ГГГГ, по умолчанию — сегодня\n'
-    '• «разовые <период>» — список посещений за месяц.\n'
+    '• «разовые <период>» — список посещений за месяц в чат '
+    '(кнопка «💬 Отчёт в чат» — за текущий месяц).\n'
     '  Пример: разовые 2026-09\n'
-    '• «разовые отчёт <период>» — отчёт за месяц файлом XLSX '
-    '(или кнопка «📊 Отчёт xlsx» ниже).\n'
+    '• «разовые отчёт <период>» (кнопка «📊 Отчёт xlsx») — отчёт за '
+    'месяц файлом XLSX\n'
     '  Пример: разовые отчёт 2026-09\n'
-    '• «разовое оплатил <vk_id или ФИО>» — отметить оплаченным самое '
-    'старое неоплаченное посещение участника\n'
+    '• «разовое оплатил <vk_id или ФИО>» (кнопка «💵 Оплатил») — '
+    'отметить оплаченным самое старое неоплаченное посещение участника\n'
     '• «редактировать оплату <id>» — изменить дату/сумму/статус/'
     'сборщика оплаты/примечание (кнопками)\n'
     '• «удалить оплату <id>» — удалить запись о посещении\n\n'
@@ -95,9 +97,7 @@ def register(
         """Общий старт FSM сбора списка посетивших на заданную дату."""
         roles = await ctx.user_management.effective_roles(message.from_id)
         if not has_access(roles, RoleName.COLLECTOR):
-            await message.answer(
-                '⚠️ Команда доступна только сборщику платежей.'
-            )
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
         await dispenser.set(
             message.peer_id, OneTimeState.VISITORS, visit_date=visit_date
@@ -108,6 +108,28 @@ def register(
             'строки или через запятую.',
             keyboard=keyboards.cancel(),
         )
+
+    async def _mark_paid(
+        message: Message, target: str, *, retry_keyboard: str | None = None
+    ) -> bool:
+        """Отмечает оплату участника и отвечает; ``False`` — если не вышло.
+
+        :param retry_keyboard: клавиатура под сообщением об ошибке — в
+            диалоге по кнопке «Оплатил» это «Отмена» (одноразовая клавиатура
+            после нажатия исчезает, а пользователь остаётся в диалоге).
+        """
+        try:
+            outcome = await ctx.one_time.mark_oldest_unpaid(
+                message.from_id, target
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}', keyboard=retry_keyboard)
+            return False
+        await message.answer(
+            f'Разовое посещение {outcome.user.full_name} '
+            f'({vk_id_label(outcome.user.vk_id)}): оплачено ✅.'
+        )
+        return True
 
     async def _show_visit_fields(message: Message, row: VisitRow) -> None:
         await dispenser.set(
@@ -127,11 +149,43 @@ def register(
         roles = await ctx.user_management.effective_roles(vk_id)
         return has_access(roles, RoleName.COLLECTOR)
 
+    async def _send_month_list(message: Message, month: MonthPeriod) -> None:
+        """Выводит в чат список разовых посещений за месяц."""
+        try:
+            rows = await ctx.one_time.month_visits(message.from_id, month)
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        if not rows:
+            await message.answer(f'Разовых посещений в {month.label()} нет.')
+            return
+        lines = [f'Разовые посещения за {month.label()}:', '']
+        for row in rows:
+            mark = '✅' if row.visit.status.value == 'paid' else '❌'
+            line = (
+                f'{mark} {row.visit.visit_date.strftime("%d.%m")} — '
+                f'{row.full_name} '
+                f'({row.visit.amount} ₽) [id {row.visit.id}]'
+            )
+            if row.collector_name is not None:
+                line += f' — собрал: {row.collector_name}'
+            if row.visit.note:
+                line += f' ({row.visit.note})'
+            lines.append(line)
+        # Примечания до 512 символов — за месяц список может не влезть в
+        # одно сообщение ВК, поэтому режем по строкам.
+        for part in helpers.split_message('\n'.join(lines)):
+            await message.answer(part)
+
     async def _send_one_time_report(
         message: Message, month: MonthPeriod
     ) -> None:
         """Собирает XLSX по месяцу и отправляет его документом."""
-        rows = await ctx.one_time.month_visits(month)
+        try:
+            rows = await ctx.one_time.month_visits(message.from_id, month)
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
         out_path = report_dir / f'one_time_{month}.xlsx'
         build_one_time_report(month, rows, out_path)
         await gateway.send_document(
@@ -178,6 +232,33 @@ def register(
             return
         await _start_register_visits(message, visit_date)
 
+    @bot.on.message(payload={'cmd': 'one_time_visited'})
+    async def start_visited_button(message: Message) -> None:
+        if not await _is_collector(message.from_id):
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
+            return
+        await dispenser.set(message.peer_id, OneTimeState.VISIT_DATE)
+        await message.answer(
+            'Введите дату посещения (ДД.ММ.ГГГГ) или нажмите «Сегодня»:',
+            keyboard=keyboards.visit_date_prompt(),
+        )
+
+    @bot.on.message(state=OneTimeState.VISIT_DATE)
+    async def step_visit_date_for_register(message: Message) -> None:
+        try:
+            visit_date = helpers.parse_visit_date(
+                message.text, datetime.now(UTC).date()
+            )
+        except DomainError as exc:
+            await message.answer(
+                f'⚠️ {exc}\nПовторите ввод даты или нажмите «Сегодня».',
+                keyboard=keyboards.visit_date_prompt(),
+            )
+            return
+        # Дальше — тот же диалог, что и у «посетили <дата>»: состояние
+        # VISIT_DATE заменяется на VISITORS с выбранной датой.
+        await _start_register_visits(message, visit_date)
+
     @bot.on.message(state=OneTimeState.VISITORS)
     async def finish_register_visits(message: Message) -> None:
         # Список vk_id/ФИО запрашивается отдельным сообщением через FSM —
@@ -215,9 +296,7 @@ def register(
     @bot.on.message(payload={'cmd': 'one_time_report'})
     async def start_one_time_report(message: Message) -> None:
         if not await _is_collector(message.from_id):
-            await message.answer(
-                '⚠️ Команда доступна только сборщику платежей.'
-            )
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
         # Месяц спрашивается отдельным сообщением — по аналогии со списком
         # посетивших в «посетили»; та же операция доступна и командой
@@ -227,6 +306,10 @@ def register(
 
     @bot.on.message(state=OneTimeReportState.PERIOD)
     async def finish_one_time_report(message: Message) -> None:
+        if not await _is_collector(message.from_id):
+            await dispenser.delete(message.peer_id)
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
+            return
         try:
             month = helpers.parse_period(message.text)
         except DomainError as exc:
@@ -243,9 +326,7 @@ def register(
     @bot.on.message(text=['разовые отчёт <period>', 'разовые отчет <period>'])
     async def one_time_report(message: Message, period: str) -> None:
         if not await _is_collector(message.from_id):
-            await message.answer(
-                '⚠️ Команда доступна только сборщику платежей.'
-            )
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
         try:
             month = helpers.parse_period(period)
@@ -256,51 +337,55 @@ def register(
 
     @bot.on.message(text=['разовые <period>'])
     async def list_visits(message: Message, period: str) -> None:
+        if not await _is_collector(message.from_id):
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
+            return
         try:
             month = helpers.parse_period(period)
         except DomainError as exc:
             await message.answer(f'⚠️ {exc}')
             return
-        rows = await ctx.one_time.month_visits(month)
-        if not rows:
-            await message.answer(f'Разовых посещений в {month.label()} нет.')
+        await _send_month_list(message, month)
+
+    @bot.on.message(payload={'cmd': 'one_time_chat'})
+    async def one_time_chat_button(message: Message) -> None:
+        if not await _is_collector(message.from_id):
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
-        lines = [f'Разовые посещения за {month.label()}:', '']
-        for row in rows:
-            mark = '✅' if row.visit.status.value == 'paid' else '❌'
-            line = (
-                f'{mark} {row.visit.visit_date.strftime("%d.%m")} — '
-                f'{row.full_name} '
-                f'({row.visit.amount} ₽) [id {row.visit.id}]'
-            )
-            if row.collector_name is not None:
-                line += f' — собрал: {row.collector_name}'
-            if row.visit.note:
-                line += f' ({row.visit.note})'
-            lines.append(line)
-        await message.answer('\n'.join(lines))
+        # Автоматизация «разовые <текущий месяц>»: месяц не спрашиваем.
+        month = MonthPeriod.from_date(datetime.now(UTC).date())
+        await _send_month_list(message, month)
 
     @bot.on.message(text=['разовое оплатил <target>'])
     async def mark_visit_paid(message: Message, target: str) -> None:
-        try:
-            outcome = await ctx.one_time.mark_oldest_unpaid(
-                message.from_id, target
-            )
-        except DomainError as exc:
-            await message.answer(f'⚠️ {exc}')
+        await _mark_paid(message, target)
+
+    @bot.on.message(payload={'cmd': 'one_time_paid'})
+    async def start_paid_button(message: Message) -> None:
+        if not await _is_collector(message.from_id):
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
+        await dispenser.set(message.peer_id, OneTimeState.PAID_TARGET)
         await message.answer(
-            f'Разовое посещение {outcome.user.full_name} '
-            f'({vk_id_label(outcome.user.vk_id)}): оплачено ✅.'
+            'Введите vk_id или ФИО участника — отмечу оплаченным его '
+            'самое старое неоплаченное посещение:',
+            keyboard=keyboards.cancel(),
         )
+
+    @bot.on.message(state=OneTimeState.PAID_TARGET)
+    async def finish_paid_button(message: Message) -> None:
+        # Неудача (не найден, неоднозначное ФИО, нечего оплачивать) —
+        # остаёмся в диалоге: можно уточнить ввод или нажать «Отмена».
+        if await _mark_paid(
+            message, message.text.strip(), retry_keyboard=keyboards.cancel()
+        ):
+            await dispenser.delete(message.peer_id)
 
     @bot.on.message(text=['редактировать оплату <visit_id:int>'])
     async def start_edit_visit(message: Message, visit_id: int) -> None:
         roles = await ctx.user_management.effective_roles(message.from_id)
         if not has_access(roles, RoleName.COLLECTOR):
-            await message.answer(
-                '⚠️ Команда доступна только сборщику платежей.'
-            )
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
         try:
             row = await ctx.one_time.get_visit(message.from_id, visit_id)
@@ -397,7 +482,7 @@ def register(
             await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
         await message.answer(
-            _ONE_TIME_HELP_TEXT, keyboard=keyboards.one_time_report()
+            _ONE_TIME_HELP_TEXT, keyboard=keyboards.one_time_actions()
         )
 
 
@@ -419,7 +504,9 @@ def _visit_display(value: object) -> str:
 def _format_visit(row: VisitRow) -> str:
     """Текущие данные записи + приглашение выбрать поле для правки."""
     mark = (
-        'оплачено ✅' if row.visit.status is PaymentStatus.PAID else 'не оплачено ❌'
+        'оплачено ✅'
+        if row.visit.status is PaymentStatus.PAID
+        else 'не оплачено ❌'
     )
     lines = [
         f'🎫 Разовое посещение id {row.visit.id}',

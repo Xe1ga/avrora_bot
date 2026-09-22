@@ -262,14 +262,24 @@ class OneTimeUseCases:
             )
             await uow.commit()
 
-    async def month_visits(self, period: MonthPeriod) -> list[VisitRow]:
+    async def month_visits(
+        self, actor_vk_id: int, period: MonthPeriod
+    ) -> list[VisitRow]:
         """Список разовых посещений за месяц с именами участников.
 
         Для оплаченных визитов дополнительно резолвит ``collector_vk_id``
         в ФИО — кто фактически собрал деньги (ТЗ 3.2), чтобы это было
         видно прямо в сводке, а не только в журнале действий.
+
+        Доступен только сборщику (и администратору): в списке — ФИО
+        участников, суммы и примечания сборщика.
+
+        :raises PermissionDeniedError: если у ``actor_vk_id`` нет роли.
         """
         async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
             visits = await uow.one_time.visits_in_month(period)
             return [await self._to_row(uow, visit) for visit in visits]
 

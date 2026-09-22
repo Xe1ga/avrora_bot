@@ -52,6 +52,10 @@ class OneTimeState(BaseStateGroup):
     # Ожидание списка vk_id/ФИО посетивших после команды «посетили [дата]»
     # — по аналогии с SubscriptionState.VOTERS, см. handlers/one_time.py.
     VISITORS = 'one_time:visitors'
+    # Кнопки раздела «Разовые»: «Посетили» спрашивает дату, «Оплатил» —
+    # vk_id/ФИО участника; те же операции доступны текстовыми командами.
+    VISIT_DATE = 'one_time:visit_date'
+    PAID_TARGET = 'one_time:paid_target'
 
 
 class OneTimePaymentEditState(BaseStateGroup):

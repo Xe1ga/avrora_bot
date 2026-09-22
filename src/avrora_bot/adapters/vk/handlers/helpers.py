@@ -10,6 +10,9 @@ from avrora_bot.domain.value_objects import MonthPeriod
 _MIN_HEIGHT = 100
 _MAX_HEIGHT = 250
 
+# Лимит длины одного сообщения ВК — с запасом от 4096.
+MAX_MESSAGE_LEN = 4000
+
 
 def parse_birthdate(raw: str) -> date:
     """Разбирает дату рождения формата ДД.ММ.ГГГГ."""
@@ -21,6 +24,36 @@ def parse_birthdate(raw: str) -> date:
         return date(year, month, day)
     except ValueError as exc:
         raise ValidationError('Некорректная дата') from exc
+
+
+def parse_visit_date(raw: str, today: date) -> date:
+    """Дата посещения: ДД.ММ.ГГГГ; пустая строка/«сегодня» — ``today``."""
+    if raw.strip().lower() in ('', 'сегодня'):
+        return today
+    return parse_birthdate(raw)
+
+
+def split_message(text: str, limit: int = MAX_MESSAGE_LEN) -> list[str]:
+    """Режет длинный текст по строкам на части не длиннее ``limit``.
+
+    ВК не принимает сообщения длиннее 4096 символов; резать посреди строки
+    нельзя — запись списка развалится, поэтому граница всегда на переводе
+    строки. Одна строка длиннее ``limit`` (в списках такого не бывает)
+    остаётся отдельной частью как есть.
+    """
+    parts: list[str] = []
+    current: list[str] = []
+    size = 0
+    for line in text.split('\n'):
+        # +1 — символ перевода строки между строками в части.
+        added = len(line) + (1 if current else 0)
+        if current and size + added > limit:
+            parts.append('\n'.join(current))
+            current, size, added = [], 0, len(line)
+        current.append(line)
+        size += added
+    parts.append('\n'.join(current))
+    return parts
 
 
 def parse_height(raw: str) -> int:
