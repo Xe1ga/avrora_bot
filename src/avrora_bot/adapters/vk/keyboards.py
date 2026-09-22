@@ -256,3 +256,68 @@ def edit_visit_fields() -> str:
         )
     )
     return kb.get_json()
+
+
+# ВК ограничивает кнопку клавиатуры ~40 символами текста и не более 10
+# строк на клавиатуру — при большем числе неоплативших список режется на
+# страницы (см. subscription_mark_page).
+_MARK_BUTTON_LABEL_MAX = 40
+MARK_PAGE_SIZE = 6
+
+
+def subscription_mark_page(
+    rows: list[tuple[int, str]],
+    selected: set[int],
+    page: int,
+) -> str:
+    """Чекбокс-список неоплативших для массовой отметки оплаты.
+
+    ``rows`` — пары (user_id, ФИО) тех, кто ещё не оплатил (порядок как в
+    сводке); ``selected`` — id, уже отмеченные в текущем диалоге (см.
+    ``SubscriptionState.MARK_SELECT``). У ВК Bot API нет callback-кнопок
+    с редактированием сообщения на месте (это доступно только через
+    Callback API сообщества, которого тут нет) — тап по имени или по
+    «Все»/«Никого» присылает боту новое сообщение с обновлённым payload,
+    и бот перерисовывает список новым сообщением, как и ``edit_user_fields``.
+    """
+    total_pages = max(1, -(-len(rows) // MARK_PAGE_SIZE))
+    page = max(0, min(page, total_pages - 1))
+    start = page * MARK_PAGE_SIZE
+    page_rows = rows[start : start + MARK_PAGE_SIZE]
+
+    kb = Keyboard(inline=True)
+    for i, (user_id, full_name) in enumerate(page_rows):
+        if i > 0:
+            kb = kb.row()
+        mark = '☑️' if user_id in selected else '⬜'
+        label = f'{mark} {full_name}'[:_MARK_BUTTON_LABEL_MAX]
+        kb = kb.add(Text(label, payload={'cmd': 'sub_toggle', 'user_id': user_id}))
+
+    if total_pages > 1:
+        kb = kb.row()
+        if page > 0:
+            kb = kb.add(
+                Text('◀ Назад', payload={'cmd': 'sub_page', 'page': page - 1})
+            )
+        if page < total_pages - 1:
+            kb = kb.add(
+                Text('Дальше ▶', payload={'cmd': 'sub_page', 'page': page + 1})
+            )
+
+    kb = (
+        kb.row()
+        .add(Text('☑️ Все', payload={'cmd': 'sub_select_all'}))
+        .add(Text('⬜ Никого', payload={'cmd': 'sub_select_none'}))
+    )
+    kb = (
+        kb.row()
+        .add(
+            Text('💾 Отметить оплаченными', payload={'cmd': 'sub_confirm'}),
+            color=KeyboardButtonColor.POSITIVE,
+        )
+        .add(
+            Text('Отмена', payload={'cmd': 'cancel'}),
+            color=KeyboardButtonColor.NEGATIVE,
+        )
+    )
+    return kb.get_json()

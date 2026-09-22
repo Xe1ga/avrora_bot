@@ -44,6 +44,9 @@ class SubscriptionState(BaseStateGroup):
     # Ожидание списка vk_id проголосовавших после команды «голоса <period>»
     # — см. handlers/subscriptions.py.
     VOTERS = 'subscription:voters'
+    # Чекбокс-список неоплативших под командой «абонементы <period>» —
+    # мультивыбор перед массовой отметкой оплаты, см. handlers/subscriptions.py.
+    MARK_SELECT = 'subscription:mark_select'
 
 
 class OneTimeState(BaseStateGroup):

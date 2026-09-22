@@ -196,6 +196,20 @@ def register(bot: Bot, ctx: BotContext) -> None:
         )
         await message.answer('\n'.join(lines))
 
+        unpaid = [
+            (row.user.id, row.user.full_name)
+            for row in summary.rows
+            if row.status is not PaymentStatus.PAID
+        ]
+        if not unpaid:
+            return
+        roles = await ctx.user_management.effective_roles(message.from_id)
+        if not has_access(roles, RoleName.COLLECTOR):
+            return
+        await _show_mark_page(
+            dispenser, message, period, unpaid, selected=set(), page=0
+        )
+
     @bot.on.message(payload={'cmd': 'subscriptions_help'})
     async def subscriptions_help(message: Message) -> None:
         roles = await ctx.user_management.effective_roles(message.from_id)
@@ -203,6 +217,101 @@ def register(bot: Bot, ctx: BotContext) -> None:
             await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
         await message.answer(_SUBSCRIPTIONS_HELP_TEXT)
+
+    @bot.on.message(
+        payload_contains={'cmd': 'sub_toggle'},
+        state=SubscriptionState.MARK_SELECT,
+    )
+    async def toggle_mark(message: Message) -> None:
+        payload = message.get_payload_json() or {}
+        user_id = payload.get('user_id')
+        peer = await dispenser.get(message.peer_id)
+        selected: set[int] = set(peer.payload['selected'])
+        if user_id in selected:
+            selected.discard(user_id)
+        else:
+            selected.add(user_id)
+        await _show_mark_page(
+            dispenser,
+            message,
+            peer.payload['period'],
+            peer.payload['rows'],
+            selected=selected,
+            page=peer.payload['page'],
+        )
+
+    @bot.on.message(
+        payload_contains={'cmd': 'sub_page'},
+        state=SubscriptionState.MARK_SELECT,
+    )
+    async def change_mark_page(message: Message) -> None:
+        payload = message.get_payload_json() or {}
+        page = int(payload.get('page', 0))
+        peer = await dispenser.get(message.peer_id)
+        await _show_mark_page(
+            dispenser,
+            message,
+            peer.payload['period'],
+            peer.payload['rows'],
+            selected=set(peer.payload['selected']),
+            page=page,
+        )
+
+    @bot.on.message(
+        payload={'cmd': 'sub_select_all'},
+        state=SubscriptionState.MARK_SELECT,
+    )
+    async def select_all_mark(message: Message) -> None:
+        peer = await dispenser.get(message.peer_id)
+        selected = {user_id for user_id, _ in peer.payload['rows']}
+        await _show_mark_page(
+            dispenser,
+            message,
+            peer.payload['period'],
+            peer.payload['rows'],
+            selected=selected,
+            page=peer.payload['page'],
+        )
+
+    @bot.on.message(
+        payload={'cmd': 'sub_select_none'},
+        state=SubscriptionState.MARK_SELECT,
+    )
+    async def select_none_mark(message: Message) -> None:
+        peer = await dispenser.get(message.peer_id)
+        await _show_mark_page(
+            dispenser,
+            message,
+            peer.payload['period'],
+            peer.payload['rows'],
+            selected=set(),
+            page=peer.payload['page'],
+        )
+
+    @bot.on.message(
+        payload={'cmd': 'sub_confirm'},
+        state=SubscriptionState.MARK_SELECT,
+    )
+    async def confirm_mark(message: Message) -> None:
+        peer = await dispenser.get(message.peer_id)
+        selected: set[int] = set(peer.payload['selected'])
+        period = peer.payload['period']
+        await dispenser.delete(message.peer_id)
+        if not selected:
+            await message.answer('Никто не выбран — оплата не отмечена.')
+            return
+        try:
+            month = helpers.parse_period(period)
+            marked = await ctx.subscriptions.mark_payments_bulk(
+                message.from_id, month, list(selected), paid=True
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        names = ', '.join(user.full_name for user in marked)
+        await message.answer(
+            f'Отмечено оплачено ✅ ({len(marked)} из {len(selected)}): {names}'
+        )
 
 
 async def _mark(
@@ -226,4 +335,30 @@ async def _mark(
     await message.answer(
         f'Отмечено: {user.full_name} '
         f'({vk_id_label(user.vk_id)}) — {mark}.'
+    )
+
+
+async def _show_mark_page(
+    dispenser,
+    message: Message,
+    period: str,
+    rows: list[tuple[int, str]],
+    *,
+    selected: set[int],
+    page: int,
+) -> None:
+    """Сохраняет состояние мультивыбора и показывает страницу чекбоксов."""
+    await dispenser.set(
+        message.peer_id,
+        SubscriptionState.MARK_SELECT,
+        period=period,
+        rows=rows,
+        selected=selected,
+        page=page,
+    )
+    total_pages = max(1, -(-len(rows) // keyboards.MARK_PAGE_SIZE))
+    await message.answer(
+        f'Отметьте, кто оплатил (стр. {page + 1}/{total_pages}, '
+        f'выбрано {len(selected)} из {len(rows)}):',
+        keyboard=keyboards.subscription_mark_page(rows, selected, page),
     )

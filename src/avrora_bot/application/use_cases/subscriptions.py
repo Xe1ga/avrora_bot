@@ -239,6 +239,55 @@ class SubscriptionUseCases:
             await uow.commit()
             return user
 
+    async def mark_payments_bulk(
+        self,
+        actor_vk_id: int,
+        period: MonthPeriod,
+        user_ids: list[int],
+        *,
+        paid: bool,
+    ) -> list[User]:
+        """Отмечает оплату сразу для нескольких участников одной транзакцией.
+
+        Используется чекбокс-клавиатурой в «Абонементах» (мультивыбор
+        неоплативших + «Отметить оплаченными») — та же логика по каждому,
+        что и в ``mark_payment``, но без отдельного запроса на человека.
+        ``user_ids`` без записи в подписке (например, участника убрали из
+        списка проголосовавших, пока диалог был открыт) молча пропускаются.
+        """
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
+            subscription = await uow.subscriptions.get_for_month(period)
+            if subscription is None:
+                raise NotFoundError('Подписка на месяц не найдена')
+            marked: list[User] = []
+            for user_id in user_ids:
+                payment = await uow.subscriptions.get_payment(
+                    subscription.id, user_id
+                )
+                if payment is None:
+                    continue
+                payment.status = (
+                    PaymentStatus.PAID if paid else PaymentStatus.UNPAID
+                )
+                payment.marked_at = datetime.now(UTC) if paid else None
+                payment.collector_vk_id = actor_vk_id if paid else None
+                await uow.subscriptions.update_payment(payment)
+                user = await uow.users.get_by_id(user_id)
+                if user is not None:
+                    marked.append(user)
+            if marked:
+                await record_action(
+                    uow,
+                    actor_vk_id,
+                    'subscription.mark_payment_bulk',
+                    f'{period} user_ids={[u.id for u in marked]} paid={paid}',
+                )
+                await uow.commit()
+            return marked
+
     async def add_voter(
         self, actor_vk_id: int, period: MonthPeriod, target: str
     ) -> VoterChange:

@@ -168,6 +168,60 @@ async def test_remove_voter_rejects_last_one(
 
 
 @pytest.mark.asyncio
+async def test_mark_payments_bulk_marks_selected(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    reg, _, subs = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(101, period, ['101', '102', '103'])
+    summary = await subs.month_summary(period)
+    by_name = {r.user.full_name: r.user for r in summary.rows}
+
+    marked = await subs.mark_payments_bulk(
+        101, period, [by_name['A A'].id, by_name['C C'].id], paid=True
+    )
+
+    assert {u.full_name for u in marked} == {'A A', 'C C'}
+    summary = await subs.month_summary(period)
+    paid_names = {
+        r.user.full_name for r in summary.rows if r.status is PaymentStatus.PAID
+    }
+    assert paid_names == {'A A', 'C C'}
+
+
+@pytest.mark.asyncio
+async def test_mark_payments_bulk_ignores_unknown_user_id(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    reg, _, subs = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(101, period, ['101', '102'])
+    summary = await subs.month_summary(period)
+    a_id = next(r.user.id for r in summary.rows if r.user.full_name == 'A A')
+
+    marked = await subs.mark_payments_bulk(101, period, [a_id, 999999], paid=True)
+
+    assert [u.full_name for u in marked] == ['A A']
+
+
+@pytest.mark.asyncio
+async def test_non_collector_cannot_mark_payments_bulk(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    reg, _, subs = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 9)
+    await subs.register_voting(101, period, ['101', '102'])
+    summary = await subs.month_summary(period)
+    a_id = next(r.user.id for r in summary.rows if r.user.full_name == 'A A')
+
+    with pytest.raises(PermissionDeniedError):
+        await subs.mark_payments_bulk(102, period, [a_id], paid=True)
+
+
+@pytest.mark.asyncio
 async def test_mark_payment_resolves_target_by_name(
     uow_factory: Callable[[], UnitOfWork],
 ) -> None:
