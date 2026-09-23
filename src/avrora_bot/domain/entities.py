@@ -106,6 +106,7 @@ class ScheduleSlot:
     end: time
     id: int | None = None
     active: bool = True
+    place: str | None = None
 
     @property
     def hall_hours(self) -> Decimal:

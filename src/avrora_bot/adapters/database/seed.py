@@ -35,12 +35,15 @@ _DEFAULT_TARIFFS: tuple[tuple[TariffKind, Decimal], ...] = (
     (TariffKind.ONE_TIME, Decimal('350')),
 )
 
-# Недельное расписание: Вт 19:00-20:30 и 20:30-22:00, Чт 19:30-21:30, Пт 19:00-21:00.
-_DEFAULT_SCHEDULE: tuple[tuple[Weekday, time, time], ...] = (
-    (Weekday.TUESDAY, time(19, 0), time(20, 30)),
-    (Weekday.TUESDAY, time(20, 30), time(22, 0)),
-    (Weekday.THURSDAY, time(19, 30), time(21, 30)),
-    (Weekday.FRIDAY, time(19, 0), time(21, 0)),
+# Недельное расписание: Вт 19:00-20:30 и 20:30-22:00, Чт 19:30-21:30, Пт 19:00-21:00
+# — с местом/тренером по умолчанию для автогенерации тренировок месяца.
+_PLACE_VOLKOVA = '15 школа, тренер Волкова Елена'
+_PLACE_KRYLOV = '15 школа, тренер Крылов Дмитрий'
+_DEFAULT_SCHEDULE: tuple[tuple[Weekday, time, time, str], ...] = (
+    (Weekday.TUESDAY, time(19, 0), time(20, 30), _PLACE_VOLKOVA),
+    (Weekday.TUESDAY, time(20, 30), time(22, 0), _PLACE_KRYLOV),
+    (Weekday.THURSDAY, time(19, 30), time(21, 30), _PLACE_KRYLOV),
+    (Weekday.FRIDAY, time(19, 0), time(21, 0), _PLACE_VOLKOVA),
 )
 
 
@@ -56,9 +59,11 @@ async def seed_reference_data(uow: UnitOfWork) -> None:
 
     slots = await uow.schedule.active_slots()
     if not slots:
-        for weekday, start, end in _DEFAULT_SCHEDULE:
+        for weekday, start, end, place in _DEFAULT_SCHEDULE:
             await uow.schedule.add(
-                e.ScheduleSlot(weekday=weekday, start=start, end=end)
+                e.ScheduleSlot(
+                    weekday=weekday, start=start, end=end, place=place
+                )
             )
         log.info('seed.schedule', slots=len(_DEFAULT_SCHEDULE))
 

@@ -261,6 +261,9 @@ class ScheduleTemplate(Base):
     start_time: Mapped[time] = mapped_column(Time)
     end_time: Mapped[time] = mapped_column(Time)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Место/тренер по умолчанию — подставляется в ``calendar_events.place``
+    # при автогенерации тренировок месяца.
+    place: Mapped[str | None] = mapped_column(String(_PLACE_LEN), nullable=True)
 
 
 class Subscription(Base, TimestampMixin):

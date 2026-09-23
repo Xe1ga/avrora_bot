@@ -74,6 +74,7 @@ def _slot_to_domain(row: m.ScheduleTemplate) -> e.ScheduleSlot:
         start=row.start_time,
         end=row.end_time,
         active=row.active,
+        place=row.place,
     )
 
 
@@ -341,6 +342,7 @@ class SqlScheduleRepository:
             start_time=slot.start,
             end_time=slot.end,
             active=slot.active,
+            place=slot.place,
         )
         self._s.add(row)
         await self._s.flush()

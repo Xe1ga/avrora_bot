@@ -176,7 +176,7 @@ class CalendarUseCases:
                             event_date=day,
                             event_time=slot.start,
                             event_type=EventType.TRAINING,
-                            place=None,
+                            place=slot.place,
                             comment=None,
                             author_vk_id=actor_vk_id,
                         )

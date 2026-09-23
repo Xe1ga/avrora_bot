@@ -143,6 +143,31 @@ async def test_generate_month_trainings_creates_from_schedule(
 
 
 @pytest.mark.asyncio
+async def test_generate_month_trainings_sets_place_from_schedule(
+    uow_factory: Callable[[], UnitOfWork],
+) -> None:
+    """Место/тренер берётся из слота расписания (``schedule_template.place``)."""
+    vk = FakeVkGateway(admins={ADMIN_VK_ID})
+    calendar = await _prepare(uow_factory, vk)
+    period = MonthPeriod(2026, 10)
+
+    result = await calendar.generate_month_trainings(CURATOR_VK_ID, period)
+
+    places = {
+        (ev.event_date.weekday(), ev.event_time): ev.place
+        for ev in result.created
+    }
+    volkova = '15 школа, тренер Волкова Елена'
+    krylov = '15 школа, тренер Крылов Дмитрий'
+    assert places == {
+        (1, time(19, 0)): volkova,
+        (1, time(20, 30)): krylov,
+        (3, time(19, 30)): krylov,
+        (4, time(19, 0)): volkova,
+    }
+
+
+@pytest.mark.asyncio
 async def test_generate_month_trainings_is_idempotent(
     uow_factory: Callable[[], UnitOfWork],
 ) -> None:
