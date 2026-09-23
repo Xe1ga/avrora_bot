@@ -67,7 +67,7 @@ def main_menu(roles: frozenset[RoleName] = frozenset()) -> str:
     if is_curator:
         kb = kb.row().add(
             Text(
-                '🗓 Календарь: команды',
+                '🗓 Календарь: управление',
                 payload={'cmd': 'calendar_help'},
             )
         )
@@ -253,6 +253,43 @@ def edit_visit_fields() -> str:
         .add(
             Text('✅ Готово', payload={'cmd': 'edit_visit_done'}),
             color=KeyboardButtonColor.POSITIVE,
+        )
+    )
+    return kb.get_json()
+
+
+def calendar_actions() -> str:
+    """Инлайн-кнопки раздела «Календарь: управление» (куратор/админ)."""
+    kb = (
+        Keyboard(inline=True)
+        .add(Text('➕ Добавить событие', payload={'cmd': 'calendar_add'}))
+        .add(Text('🗑 Удалить событие', payload={'cmd': 'calendar_delete'}))
+        .row()
+        .add(
+            Text(
+                '📅 Создать тренировки на следующий месяц',
+                payload={'cmd': 'calendar_generate_trainings'},
+            )
+        )
+    )
+    return kb.get_json()
+
+
+def calendar_event_type() -> str:
+    """Инлайн-кнопки выбора типа события в диалоге «Добавить событие»."""
+    kb = (
+        Keyboard(inline=True)
+        .add(
+            Text(
+                '🏐 Тренировка',
+                payload={'cmd': 'calendar_add_type', 'type': 'training'},
+            )
+        )
+        .add(
+            Text(
+                '🏆 Игра',
+                payload={'cmd': 'calendar_add_type', 'type': 'game'},
+            )
         )
     )
     return kb.get_json()
