@@ -1,6 +1,6 @@
 """Общие хендлеры: старт, помощь, меню, статус, просмотр календаря."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from vkbottle import Bot
 from vkbottle.bot import Message
@@ -56,8 +56,9 @@ def register(bot: Bot, ctx: BotContext, *, schedule_url: str) -> None:
     @bot.on.message(payload={'cmd': 'calendar'})
     @bot.on.message(text=['календарь'])
     async def calendar_current(message: Message) -> None:
-        period = MonthPeriod.from_date(datetime.now(UTC).date())
-        await _show_calendar(ctx, message, period, schedule_url)
+        today = datetime.now(UTC).date()
+        period = MonthPeriod.from_date(today)
+        await _show_calendar(ctx, message, period, schedule_url, from_date=today)
 
     @bot.on.message(text=['календарь <raw>'])
     async def calendar_month(message: Message, raw: str) -> None:
@@ -93,10 +94,21 @@ async def _show_status(ctx: BotContext, message: Message) -> None:
 
 
 async def _show_calendar(
-    ctx: BotContext, message: Message, period: MonthPeriod, schedule_url: str
+    ctx: BotContext,
+    message: Message,
+    period: MonthPeriod,
+    schedule_url: str,
+    *,
+    from_date: date | None = None,
 ) -> None:
-    """Отправляет список событий календаря за месяц (доступно всем)."""
-    events = await ctx.calendar.list_month(period)
+    """Отправляет список событий календаря за месяц (доступно всем).
+
+    ``from_date`` — только для команды «Календарь» без периода: прошедшие
+    тренировки/игры текущего месяца из списка убираются (см.
+    ``CalendarUseCases.list_month``). При явном запросе месяца не
+    передаётся — там нужен весь месяц целиком, для истории.
+    """
+    events = await ctx.calendar.list_month(period, from_date=from_date)
     keyboard = keyboards.schedule_link(schedule_url)
     if not events:
         await message.answer(

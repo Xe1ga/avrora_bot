@@ -102,7 +102,19 @@ class CalendarUseCases:
             )
             await uow.commit()
 
-    async def list_month(self, period: MonthPeriod) -> list[CalendarEvent]:
-        """Просмотр событий месяца (доступно всем)."""
+    async def list_month(
+        self, period: MonthPeriod, *, from_date: date | None = None
+    ) -> list[CalendarEvent]:
+        """Просмотр событий месяца (доступно всем).
+
+        ``from_date`` отфильтровывает события раньше этой даты — команда
+        «Календарь» без явного периода показывает только предстоящие
+        тренировки/игры (см. handlers/common.py). При явном запросе месяца
+        («календарь <период>») не передаётся — там нужен весь месяц,
+        включая прошедшее, для просмотра истории.
+        """
         async with self._uow_factory() as uow:
-            return await uow.calendar.list_for_month(period)
+            events = await uow.calendar.list_for_month(period)
+            if from_date is not None:
+                events = [ev for ev in events if ev.event_date >= from_date]
+            return events
