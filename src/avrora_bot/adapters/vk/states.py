@@ -84,3 +84,18 @@ class OneTimeReportState(BaseStateGroup):
     """
 
     PERIOD = 'one_time_report:period'
+
+
+class CalendarManageState(BaseStateGroup):
+    """Диалог управления календарём куратором (ТЗ 3.7).
+
+    Кнопки раздела «Календарь: управление»: «Добавить событие» шагает по
+    дате/типу/времени/месту, «Удалить событие» спрашивает id. Собственный
+    префикс ``calendar_manage:`` — как и у остальных групп.
+    """
+
+    ADD_DATE = 'calendar_manage:add_date'
+    ADD_TYPE = 'calendar_manage:add_type'
+    ADD_TIME = 'calendar_manage:add_time'
+    ADD_PLACE = 'calendar_manage:add_place'
+    DELETE_ID = 'calendar_manage:delete_id'
