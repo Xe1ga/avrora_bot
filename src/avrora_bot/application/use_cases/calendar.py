@@ -5,7 +5,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, time, timedelta
 
 from avrora_bot.application.services import permissions
 from avrora_bot.application.services.action_log import record_action
@@ -28,6 +28,15 @@ class EventData:
     event_time: time | None = None
     place: str | None = None
     comment: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GeneratedTrainings:
+    """Результат автогенерации тренировок месяца по недельному расписанию."""
+
+    period: MonthPeriod
+    created: list[CalendarEvent]
+    skipped: int
 
 
 class CalendarUseCases:
@@ -118,3 +127,70 @@ class CalendarUseCases:
             if from_date is not None:
                 events = [ev for ev in events if ev.event_date >= from_date]
             return events
+
+    async def generate_month_trainings(
+        self, actor_vk_id: int, period: MonthPeriod
+    ) -> GeneratedTrainings:
+        """Создаёт тренировки месяца по недельному расписанию (только куратор).
+
+        Расписание — то же самое, что используется при расчёте стоимости
+        абонемента (``domain.services.tariff_calc.month_cost``): активные
+        слоты ``ScheduleSlot`` (день недели + время начала/конца), см.
+        ``uow.schedule``. Идемпотентно: уже существующая тренировка (тот же
+        день + то же время начала) не дублируется, повторный вызов на тот
+        же месяц только досоздаёт недостающее — как ``seed_reference_data``
+        для тарифов/расписания.
+        """
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.CURATOR
+            )
+            active = [
+                slot
+                for slot in await uow.schedule.active_slots()
+                if slot.active
+            ]
+            if not active:
+                raise NotFoundError('Расписание тренировок не задано')
+
+            existing = await uow.calendar.list_for_month(period)
+            existing_pairs = {
+                (ev.event_date, ev.event_time)
+                for ev in existing
+                if ev.event_type is EventType.TRAINING
+            }
+            by_weekday: dict[int, list] = {}
+            for slot in active:
+                by_weekday.setdefault(slot.weekday.index, []).append(slot)
+
+            created: list[CalendarEvent] = []
+            skipped = 0
+            day = period.first_day
+            while day <= period.last_day:
+                for slot in by_weekday.get(day.weekday(), []):
+                    if (day, slot.start) in existing_pairs:
+                        skipped += 1
+                        continue
+                    event = await uow.calendar.add(
+                        CalendarEvent(
+                            event_date=day,
+                            event_time=slot.start,
+                            event_type=EventType.TRAINING,
+                            place=None,
+                            comment=None,
+                            author_vk_id=actor_vk_id,
+                        )
+                    )
+                    created.append(event)
+                day += timedelta(days=1)
+
+            await record_action(
+                uow,
+                actor_vk_id,
+                'calendar.generate_month_trainings',
+                f'{period} created={len(created)} skipped={skipped}',
+            )
+            await uow.commit()
+            return GeneratedTrainings(
+                period=period, created=created, skipped=skipped
+            )

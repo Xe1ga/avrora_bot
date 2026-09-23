@@ -5,6 +5,8 @@
 пошаговым FSM-диалогом, по образцу handlers/one_time.py.
 """
 
+from datetime import UTC, datetime
+
 from vkbottle import Bot
 from vkbottle.bot import Message
 
@@ -15,7 +17,8 @@ from avrora_bot.adapters.vk.states import CalendarManageState
 from avrora_bot.application.services.permissions import has_access
 from avrora_bot.application.use_cases.calendar import EventData
 from avrora_bot.domain.enums import EventType, RoleName
-from avrora_bot.domain.errors import DomainError, ValidationError
+from avrora_bot.domain.errors import DomainError
+from avrora_bot.domain.value_objects import MonthPeriod
 
 _CALENDAR_MANAGE_TEXT = '🗓 Управление календарём — выберите действие:'
 
@@ -174,26 +177,25 @@ def register(bot: Bot, ctx: BotContext) -> None:
         await dispenser.delete(message.peer_id)
         await message.answer(f'Событие id {event_id} удалено.')
 
+    @bot.on.message(payload={'cmd': 'calendar_generate_trainings'})
+    async def generate_trainings(message: Message) -> None:
+        next_period = MonthPeriod.from_date(
+            datetime.now(UTC).date()
+        ).next_month()
+        try:
+            result = await ctx.calendar.generate_month_trainings(
+                message.from_id, next_period
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await message.answer(
+            f'Тренировки на {next_period.label()}: '
+            f'создано {len(result.created)}, уже было {result.skipped}.'
+        )
+
 
 def _payload_value(message: Message, key: str) -> str:
     """Извлекает значение поля из payload инлайн-кнопки."""
     payload = message.get_payload_json() or {}
     return str(payload.get(key, ''))
-
-
-def _build_event(day: str, etype: str, etime: str, place: str) -> EventData:
-    """Собирает ``EventData`` из аргументов текстовой команды (legacy).
-
-    Больше не вызывается из хендлеров (добавление события теперь — диалог
-    по кнопке, см. ``step_add_*`` выше), но формат разбора данных совпадает
-    с ним — оставлена для справки/возможного переиспользования.
-    """
-    event_type = _EVENT_TYPE_ALIASES.get(etype.strip().lower())
-    if event_type is None:
-        raise ValidationError('Тип события: тренировка/игра')
-    return EventData(
-        event_date=helpers.parse_birthdate(day),
-        event_type=event_type,
-        event_time=helpers.parse_event_time(etime),
-        place=place.strip() or None,
-    )
