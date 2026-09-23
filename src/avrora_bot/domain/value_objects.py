@@ -89,6 +89,12 @@ class MonthPeriod:
         """Название месяца по-русски в именительном падеже ('сентябрь')."""
         return _MONTH_NAMES_RU[self.month - 1]
 
+    def next_month(self) -> MonthPeriod:
+        """Следующий месяц (декабрь -> январь следующего года)."""
+        if self.month == 12:  # noqa: PLR2004
+            return MonthPeriod(year=self.year + 1, month=1)
+        return MonthPeriod(year=self.year, month=self.month + 1)
+
     def label(self) -> str:
         """Человекочитаемая метка, напр. 'сентябрь 2026'."""
         return f'{self.month_name} {self.year}'

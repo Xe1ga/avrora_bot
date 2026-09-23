@@ -3,6 +3,8 @@
 Просмотр календаря реализован в ``common.py`` (доступен всем).
 """
 
+from datetime import UTC, datetime
+
 from vkbottle import Bot
 from vkbottle.bot import Message
 
@@ -12,6 +14,7 @@ from avrora_bot.application.services.permissions import has_access
 from avrora_bot.application.use_cases.calendar import EventData
 from avrora_bot.domain.enums import EventType, RoleName
 from avrora_bot.domain.errors import DomainError, ValidationError
+from avrora_bot.domain.value_objects import MonthPeriod
 
 _CALENDAR_HELP_TEXT = (
     '🗓 Управление календарём:\n\n'
@@ -71,6 +74,23 @@ def register(bot: Bot, ctx: BotContext) -> None:
             await message.answer('⚠️ Команда доступна только куратору.')
             return
         await message.answer(_CALENDAR_HELP_TEXT)
+
+    @bot.on.message(payload={'cmd': 'calendar_generate_trainings'})
+    async def generate_trainings(message: Message) -> None:
+        next_period = MonthPeriod.from_date(
+            datetime.now(UTC).date()
+        ).next_month()
+        try:
+            result = await ctx.calendar.generate_month_trainings(
+                message.from_id, next_period
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await message.answer(
+            f'Тренировки на {next_period.label()}: '
+            f'создано {len(result.created)}, уже было {result.skipped}.'
+        )
 
 
 def _build_event(day: str, etype: str, etime: str, place: str) -> EventData:
