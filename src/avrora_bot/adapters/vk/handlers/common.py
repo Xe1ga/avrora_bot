@@ -7,7 +7,9 @@ from vkbottle.bot import Message
 
 from avrora_bot.adapters.vk import keyboards
 from avrora_bot.adapters.vk.context import BotContext
-from avrora_bot.domain.enums import EventType
+from avrora_bot.application.services.permissions import has_access
+from avrora_bot.domain.entities import CalendarEvent
+from avrora_bot.domain.enums import EventType, RoleName
 from avrora_bot.domain.errors import DomainError
 from avrora_bot.domain.value_objects import MonthPeriod
 
@@ -107,6 +109,9 @@ async def _show_calendar(
     тренировки/игры текущего месяца из списка убираются (см.
     ``CalendarUseCases.list_month``). При явном запросе месяца не
     передаётся — там нужен весь месяц целиком, для истории.
+
+    Куратору и администратору к каждому событию дописывается его id —
+    он нужен для «Удалить событие» в разделе «Календарь: управление».
     """
     events = await ctx.calendar.list_month(period, from_date=from_date)
     keyboard = keyboards.schedule_link(schedule_url)
@@ -115,6 +120,17 @@ async def _show_calendar(
             f'На {period.label()} событий нет.', keyboard=keyboard
         )
         return
+    roles = await ctx.user_management.effective_roles(message.from_id)
+    show_ids = has_access(roles, RoleName.CURATOR)
+    await message.answer(
+        format_calendar(period, events, show_ids=show_ids), keyboard=keyboard
+    )
+
+
+def format_calendar(
+    period: MonthPeriod, events: list[CalendarEvent], *, show_ids: bool
+) -> str:
+    """Текст календаря на месяц; ``show_ids`` — дописать ``[id N]``."""
     lines = [f'📅 Календарь на {period.label()}:', '']
     for ev in events:
         label = _EVENT_LABELS.get(ev.event_type, ev.event_type.value)
@@ -122,5 +138,6 @@ async def _show_calendar(
         if ev.event_time is not None:
             when += ev.event_time.strftime(' %H:%M')
         place = f' — {ev.place}' if ev.place else ''
-        lines.append(f'{when} {label}{place}')
-    await message.answer('\n'.join(lines), keyboard=keyboard)
+        event_id = f' [id {ev.id}]' if show_ids else ''
+        lines.append(f'{when} {label}{place}{event_id}')
+    return '\n'.join(lines)

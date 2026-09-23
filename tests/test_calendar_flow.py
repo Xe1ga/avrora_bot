@@ -6,6 +6,7 @@ from datetime import date, time
 import pytest
 
 from avrora_bot.adapters.database.seed import seed_reference_data
+from avrora_bot.adapters.vk.handlers.common import format_calendar
 from avrora_bot.application.use_cases.calendar import (
     CalendarUseCases,
     EventData,
@@ -15,6 +16,7 @@ from avrora_bot.application.use_cases.registration import (
     RegistrationUseCases,
 )
 from avrora_bot.application.use_cases.roles import RoleUseCases
+from avrora_bot.domain.entities import CalendarEvent
 from avrora_bot.domain.enums import EventType, RoleName
 from avrora_bot.domain.errors import NotFoundError, PermissionDeniedError
 from avrora_bot.domain.ports.uow import UnitOfWork
@@ -248,3 +250,46 @@ async def test_generate_month_trainings_requires_schedule(
 def test_month_period_next_month_rolls_over_year() -> None:
     assert MonthPeriod(2026, 12).next_month() == MonthPeriod(2027, 1)
     assert MonthPeriod(2026, 9).next_month() == MonthPeriod(2026, 10)
+
+
+def _calendar_events() -> list[CalendarEvent]:
+    return [
+        CalendarEvent(
+            event_date=date(2026, 10, 6),
+            event_time=time(19, 0),
+            event_type=EventType.TRAINING,
+            place='15 школа, тренер Волкова Елена',
+            comment=None,
+            author_vk_id=CURATOR_VK_ID,
+            id=23,
+        ),
+        CalendarEvent(
+            event_date=date(2026, 10, 10),
+            event_time=None,
+            event_type=EventType.GAME,
+            place=None,
+            comment=None,
+            author_vk_id=CURATOR_VK_ID,
+            id=40,
+        ),
+    ]
+
+
+def test_format_calendar_shows_ids_for_staff() -> None:
+    """Куратору/администратору — id события в конце строки."""
+    text = format_calendar(
+        MonthPeriod(2026, 10), _calendar_events(), show_ids=True
+    )
+    lines = text.splitlines()
+    assert lines[2] == (
+        '06.10 19:00 🏐 Тренировка — 15 школа, тренер Волкова Елена [id 23]'
+    )
+    assert lines[3] == '10.10 🏆 Игра [id 40]'
+
+
+def test_format_calendar_hides_ids_for_players() -> None:
+    text = format_calendar(
+        MonthPeriod(2026, 10), _calendar_events(), show_ids=False
+    )
+    assert '[id' not in text
+    assert text.splitlines()[3] == '10.10 🏆 Игра'
