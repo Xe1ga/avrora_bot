@@ -31,6 +31,9 @@ log = get_logger('app')
 
 # Период фоновой задачи, переводящей прошедшие события в «выполнено».
 _AUTO_COMPLETE_INTERVAL_SEC = 15 * 60
+# Предел одного прохода: зависший запрос к БД не должен навсегда
+# остановить автозавершение и удерживать соединение из пула.
+_AUTO_COMPLETE_TIMEOUT_SEC = 2 * 60
 
 
 async def _bootstrap(container: Container) -> None:
@@ -54,18 +57,26 @@ async def _auto_complete_events(container: Container) -> None:
     """Раз в 15 минут переводит прошедшие события календаря в «выполнено».
 
     Первый проход — сразу при старте: догоняет всё, что закончилось, пока
-    бот был выключен. Ошибка одного прохода логируется и не останавливает
-    задачу.
+    бот был выключен. Ошибка или превышение таймаута одного прохода
+    логируются и не останавливают задачу.
     """
     while True:
         try:
             tz = ZoneInfo(container.settings.tz)
             now = datetime.now(tz).replace(tzinfo=None)
-            async with container.uow_factory() as uow:
+            async with (
+                asyncio.timeout(_AUTO_COMPLETE_TIMEOUT_SEC),
+                container.uow_factory() as uow,
+            ):
                 completed = await complete_finished_events(uow, now)
                 await uow.commit()
             if completed:
                 log.info('calendar.auto_completed', count=completed)
+        except TimeoutError:
+            log.error(
+                'calendar.auto_complete_timeout',
+                timeout_sec=_AUTO_COMPLETE_TIMEOUT_SEC,
+            )
         except Exception:
             log.exception('calendar.auto_complete_failed')
         await asyncio.sleep(_AUTO_COMPLETE_INTERVAL_SEC)
