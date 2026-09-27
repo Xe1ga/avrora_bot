@@ -265,6 +265,8 @@ def calendar_actions() -> str:
         .add(Text('➕ Добавить событие', payload={'cmd': 'calendar_add'}))
         .add(Text('🗑 Удалить событие', payload={'cmd': 'calendar_delete'}))
         .row()
+        .add(Text('❌ Отменить событие', payload={'cmd': 'calendar_cancel'}))
+        .row()
         .add(
             Text(
                 '📅 Создать тренировки на следующий месяц',

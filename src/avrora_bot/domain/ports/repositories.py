@@ -163,6 +163,10 @@ class CalendarRepository(Protocol):
         self, period: MonthPeriod
     ) -> list[CalendarEvent]: ...
 
+    async def list_planned_until(self, day: date) -> list[CalendarEvent]:
+        """Запланированные события с датой не позже ``day``."""
+        ...
+
 
 class ActionLogRepository(Protocol):
     """Журнал административных действий."""

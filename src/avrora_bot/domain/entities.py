@@ -9,6 +9,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from avrora_bot.domain.enums import (
+    EventStatus,
     EventType,
     LegalDocumentKind,
     PaymentStatus,
@@ -185,6 +186,7 @@ class CalendarEvent:
     comment: str | None
     author_vk_id: int
     id: int | None = None
+    status: EventStatus = EventStatus.PLANNED
 
 
 @dataclass(slots=True)

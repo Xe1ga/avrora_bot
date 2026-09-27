@@ -15,6 +15,7 @@ from avrora_bot.adapters.database import models as m
 from avrora_bot.adapters.database.crypto import PiiCipher
 from avrora_bot.domain import entities as e
 from avrora_bot.domain.enums import (
+    EventStatus,
     EventType,
     LegalDocumentKind,
     PaymentStatus,
@@ -126,6 +127,7 @@ def _event_to_domain(row: m.CalendarEvent) -> e.CalendarEvent:
         place=row.place,
         comment=row.comment,
         author_vk_id=row.author_vk_id,
+        status=EventStatus(row.status),
     )
 
 
@@ -519,6 +521,7 @@ class SqlCalendarRepository:
             place=event.place,
             comment=event.comment,
             author_vk_id=event.author_vk_id,
+            status=event.status,
         )
         self._s.add(row)
         await self._s.flush()
@@ -537,6 +540,7 @@ class SqlCalendarRepository:
         row.event_type = event.event_type
         row.place = event.place
         row.comment = event.comment
+        row.status = event.status
         await self._s.flush()
 
     async def delete(self, event_id: int) -> None:
@@ -555,6 +559,15 @@ class SqlCalendarRepository:
                 m.CalendarEvent.event_date <= period.last_day,
             )
             .order_by(m.CalendarEvent.event_date, m.CalendarEvent.event_time)
+        )
+        return [_event_to_domain(r) for r in rows]
+
+    async def list_planned_until(self, day: date) -> list[e.CalendarEvent]:
+        rows = await self._s.scalars(
+            select(m.CalendarEvent).where(
+                m.CalendarEvent.status == EventStatus.PLANNED,
+                m.CalendarEvent.event_date <= day,
+            )
         )
         return [_event_to_domain(r) for r in rows]
 

@@ -1,7 +1,7 @@
 """Хендлеры календаря: редактирование куратором (ТЗ 3.7).
 
 Просмотр календаря реализован в ``common.py`` (доступен всем). Управление
-(добавление/удаление события) — кнопки раздела «Календарь: управление» с
+(добавление/удаление/отмена события) — кнопки раздела «Календарь: управление» с
 пошаговым FSM-диалогом, по образцу handlers/one_time.py.
 """
 
@@ -176,6 +176,41 @@ def register(bot: Bot, ctx: BotContext) -> None:
             return
         await dispenser.delete(message.peer_id)
         await message.answer(f'Событие id {event_id} удалено.')
+
+    @bot.on.message(payload={'cmd': 'calendar_cancel'})
+    async def start_cancel_event(message: Message) -> None:
+        if not await _is_curator(message.from_id):
+            await message.answer('⚠️ Команда доступна только куратору.')
+            return
+        await dispenser.set(message.peer_id, CalendarManageState.CANCEL_ID)
+        await message.answer(
+            'Введите id события для отмены:',
+            keyboard=keyboards.cancel(),
+        )
+
+    @bot.on.message(state=CalendarManageState.CANCEL_ID)
+    async def step_cancel_event(message: Message) -> None:
+        raw = message.text.strip()
+        if not raw.isdigit():
+            await message.answer(
+                '⚠️ id — целое число. Повторите ввод:',
+                keyboard=keyboards.cancel(),
+            )
+            return
+        event_id = int(raw)
+        try:
+            event = await ctx.calendar.cancel_event(message.from_id, event_id)
+        except DomainError as exc:
+            await message.answer(
+                f'⚠️ {exc}\nПовторите ввод id или нажмите «Отмена».',
+                keyboard=keyboards.cancel(),
+            )
+            return
+        await dispenser.delete(message.peer_id)
+        when = event.event_date.strftime('%d.%m.%Y')
+        if event.event_time is not None:
+            when += event.event_time.strftime(' %H:%M')
+        await message.answer(f'Событие id {event_id} ({when}) отменено.')
 
     @bot.on.message(payload={'cmd': 'calendar_generate_trainings'})
     async def generate_trainings(message: Message) -> None:

@@ -11,6 +11,7 @@
       --accent: #4a76a8;
       --accent-hover: #3d6390;
       --game: #a12868;
+      --cancel: #c0392b;
       --bg: #f5f7fa;
       --card: #ffffff;
       --text: #1a1a1a;
@@ -216,6 +217,26 @@
     .badge.training { background: var(--accent); }
     .badge.game { background: var(--game); }
 
+    /* ── Статусы: выполнено — «✓», отмена — зачёркнуто + пометка ── */
+    .done-mark {
+      font-weight: 500;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+    .event.is-cancelled .event-time,
+    .event.is-cancelled .event-place {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+    .event.is-cancelled .badge { background: #9aa0a6; }
+    .status-tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--cancel);
+      white-space: nowrap;
+      align-self: center;
+    }
+
     .event-details {
       display: flex;
       flex-direction: column;
@@ -313,6 +334,10 @@
           По
           <input type="date" id="dateTo">
         </label>
+        <label class="field">
+          <input type="checkbox" id="hideCancelled">
+          Скрыть отменённые
+        </label>
         <button class="btn-reset" id="resetFilters" type="button">Сбросить фильтры</button>
       </div>
     </div>
@@ -320,10 +345,11 @@
     <div id="events"></div>
 
     <div class="legend">
-      🏐 — тренировка · 🏆 — игра.<br>
+      🏐 — тренировка · 🏆 — игра · ✓ — состоялась ·
+      <s>зачёркнуто</s> — отменена.<br>
       Расписание — точный снимок календаря бота на момент генерации
       страницы (__GENERATED_DATE__). Изменения вносятся через бота
-      (команда «событие …» / «удалить событие») и появляются здесь после
+      (раздел «Календарь: управление») и появляются здесь после
       следующего запуска генератора.
     </div>
 
@@ -342,7 +368,7 @@
     // бессмысленно.
     const EVENTS = __EVENTS_JSON__;
 
-    const state = { month: 'all', type: 'all', from: '', to: '' };
+    const state = { month: 'all', type: 'all', from: '', to: '', hideCancelled: false };
 
     const TODAY = new Date().toISOString().slice(0, 10);
     const LABELS = { training: '🏐 Тренировка', game: '🏆 Игра' };
@@ -360,6 +386,7 @@
       if (state.type !== 'all' && ev.type !== state.type) return false;
       if (state.from && ev.date < state.from) return false;
       if (state.to && ev.date > state.to) return false;
+      if (state.hideCancelled && ev.status === 'cancelled') return false;
       return true;
     }
 
@@ -385,14 +412,21 @@
         html += `<div class="day-heading${isToday ? ' is-today' : ''}">${formatDayHeading(date)}${isToday ? ' · сегодня' : ''}</div>`;
         for (const ev of evs) {
           const isPast = date < TODAY;
+          const isCancelled = ev.status === 'cancelled';
           const time = ev.time || 'время не указано';
           const timeClass = ev.time ? 'event-time' : 'event-time is-unset';
+          const doneMark = ev.status === 'done' ? '<span class="done-mark" title="Состоялась">✓</span>' : '';
+          const statusTag = isCancelled ? '<span class="status-tag">отмена</span>' : '';
+          const classes = ['event'];
+          if (isPast) classes.push('is-past');
+          if (isCancelled) classes.push('is-cancelled');
           const place = ev.place ? `<div class="event-place">📍 ${escapeHtml(ev.place)}</div>` : '';
           const comment = ev.comment ? `<div class="event-comment">${escapeHtml(ev.comment)}</div>` : '';
           html += `
-            <div class="event${isPast ? ' is-past' : ''}">
-              <div class="${timeClass}">${escapeHtml(time)}</div>
+            <div class="${classes.join(' ')}">
+              <div class="${timeClass}">${escapeHtml(time)}${doneMark}</div>
               <span class="badge ${ev.type}">${LABELS[ev.type] || ev.type}</span>
+              ${statusTag}
               <div class="event-details">${place}${comment}</div>
             </div>`;
         }
@@ -432,7 +466,14 @@
       render();
     });
 
+    document.getElementById('hideCancelled').addEventListener('change', (e) => {
+      state.hideCancelled = e.target.checked;
+      render();
+    });
+
     document.getElementById('resetFilters').addEventListener('click', () => {
+      state.hideCancelled = false;
+      document.getElementById('hideCancelled').checked = false;
       state.month = 'all';
       state.type = 'all';
       state.from = '';

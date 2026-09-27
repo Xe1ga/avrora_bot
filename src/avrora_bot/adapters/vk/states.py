@@ -90,7 +90,8 @@ class CalendarManageState(BaseStateGroup):
     """Диалог управления календарём куратором (ТЗ 3.7).
 
     Кнопки раздела «Календарь: управление»: «Добавить событие» шагает по
-    дате/типу/времени/месту, «Удалить событие» спрашивает id. Собственный
+    дате/типу/времени/месту, «Удалить событие» и «Отменить событие»
+    спрашивают id. Собственный
     префикс ``calendar_manage:`` — как и у остальных групп.
     """
 
@@ -99,3 +100,4 @@ class CalendarManageState(BaseStateGroup):
     ADD_TIME = 'calendar_manage:add_time'
     ADD_PLACE = 'calendar_manage:add_place'
     DELETE_ID = 'calendar_manage:delete_id'
+    CANCEL_ID = 'calendar_manage:cancel_id'

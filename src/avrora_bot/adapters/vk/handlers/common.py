@@ -8,6 +8,7 @@ from vkbottle.bot import Message
 from avrora_bot.adapters.vk import keyboards
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.application.services.permissions import has_access
+from avrora_bot.application.use_cases.calendar import chat_visible_status
 from avrora_bot.domain.entities import CalendarEvent
 from avrora_bot.domain.enums import EventType, RoleName
 from avrora_bot.domain.errors import DomainError
@@ -110,10 +111,17 @@ async def _show_calendar(
     ``CalendarUseCases.list_month``). При явном запросе месяца не
     передаётся — там нужен весь месяц целиком, для истории.
 
+    По статусу (см. ``chat_visible_status``): за текущий и будущие месяцы —
+    только запланированные, за прошедшие — только выполненные; отменённые
+    не показываются. Статус в тексте не обозначается.
+
     Куратору и администратору к каждому событию дописывается его id —
-    он нужен для «Удалить событие» в разделе «Календарь: управление».
+    он нужен для «Удалить/Отменить событие» в «Календарь: управление».
     """
-    events = await ctx.calendar.list_month(period, from_date=from_date)
+    status = chat_visible_status(period, datetime.now(UTC).date())
+    events = await ctx.calendar.list_month(
+        period, from_date=from_date, status=status
+    )
     keyboard = keyboards.schedule_link(schedule_url)
     if not events:
         await message.answer(

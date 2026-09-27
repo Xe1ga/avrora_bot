@@ -31,6 +31,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from avrora_bot.adapters.database.base import Base, TimestampMixin
 from avrora_bot.domain.enums import (
+    EventStatus,
     EventType,
     LegalDocumentKind,
     PaymentStatus,
@@ -364,6 +365,11 @@ class CalendarEvent(Base):
     place: Mapped[str | None] = mapped_column(String(_PLACE_LEN), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     author_vk_id: Mapped[int] = mapped_column(Integer)
+    status: Mapped[EventStatus] = mapped_column(
+        String(_ENUM_LEN),
+        default=EventStatus.PLANNED,
+        server_default=EventStatus.PLANNED.value,
+    )
 
 
 class ActionLog(Base, TimestampMixin):

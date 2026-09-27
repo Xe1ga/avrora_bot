@@ -41,6 +41,19 @@ class EventType(StrEnum):
     GAME = 'game'  # игра
 
 
+class EventStatus(StrEnum):
+    """Статус события календаря.
+
+    ``planned`` ставится при создании; ``done`` — автоматически по истечении
+    времени события (фоновая задача бота, см. ``complete_finished_events``);
+    ``cancelled`` — вручную куратором («Отменить событие»).
+    """
+
+    PLANNED = 'planned'  # запланировано
+    DONE = 'done'  # выполнено
+    CANCELLED = 'cancelled'  # отмена
+
+
 class LegalDocumentKind(StrEnum):
     """Вид юридического документа, публикуемого в ``docs/legal/``."""
 

@@ -11,13 +11,17 @@
 
 Файл ``docs/schedule.html`` полностью перезаписывается при каждом
 запуске — редактировать его руками бессмысленно, следующий запуск сотрёт
-правки. Меняйте данные через бота (команда «событие <дата> <тип> <время>
-<место>» / «удалить событие <id>», см. «🗓 Календарь: команды») и
-перезапускайте этот скрипт.
+правки. Меняйте данные через бота (кнопки раздела «Календарь: управление»:
+добавить / удалить / отменить событие, создать тренировки на следующий
+месяц) и перезапускайте этот скрипт.
 
 Данные берутся исключительно из таблицы ``calendar_events`` — никаких
 предположений о «регулярном» расписании скрипт не делает: если событие не
-занесено в календарь бота, на странице его не будет.
+занесено в календарь бота, на странице его не будет. На странице видны все
+статусы: запланированные — как есть, выполненные — с «✓», отменённые —
+зачёркнутыми. Перед сборкой скрипт сам переводит в «выполнено» события,
+время которых уже вышло (то же, что делает фоновая задача бота), — страница
+актуальна, даже если бот в этот момент не запущен.
 
 Требует доступа к той же БД, что и сам бот (переменные окружения из ``.env``
 в корне проекта — DSN, ключ шифрования ПД для сборки Unit of Work; сами
@@ -49,6 +53,9 @@ from avrora_bot.adapters.database.engine import (  # noqa: E402
 )
 from avrora_bot.adapters.database.unit_of_work import (  # noqa: E402
     SqlAlchemyUnitOfWork,
+)
+from avrora_bot.application.use_cases.calendar import (  # noqa: E402
+    complete_finished_events,
 )
 from avrora_bot.config import get_settings  # noqa: E402
 from avrora_bot.domain.entities import CalendarEvent  # noqa: E402
@@ -121,7 +128,13 @@ async def fetch_events(periods: list[MonthPeriod]) -> list[CalendarEvent]:
     )
 
     events: list[CalendarEvent] = []
+    now = datetime.now(ZoneInfo(settings.tz)).replace(tzinfo=None)
     try:
+        async with SqlAlchemyUnitOfWork(session_factory, cipher) as uow:
+            completed = await complete_finished_events(uow, now)
+            await uow.commit()
+            if completed:
+                print(f'Отмечено выполненными: {completed}')
         async with SqlAlchemyUnitOfWork(session_factory, cipher) as uow:
             for period in periods:
                 events.extend(await uow.calendar.list_for_month(period))
@@ -151,6 +164,7 @@ def event_to_dict(event: CalendarEvent) -> dict[str, str | None]:
         'type': event.event_type.value,
         'place': event.place,
         'comment': event.comment,
+        'status': event.status.value,
     }
 
 
@@ -208,7 +222,7 @@ async def main() -> None:
     if not events:
         print(
             'Внимание: событий не найдено — если куратор не заносит '
-            'регулярные тренировки в календарь бота (команда «событие …»), '
+            'тренировки в календарь бота («Календарь: управление»), '
             'страница будет показывать только то, что реально добавлено.'
         )
 
