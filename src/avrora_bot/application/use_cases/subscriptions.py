@@ -28,6 +28,9 @@ from avrora_bot.domain.value_objects import MonthPeriod
 
 UowFactory = Callable[[], UnitOfWork]
 
+# Как у разовых посещений — короткая пометка, а не пересланное сообщение.
+MAX_PAYMENT_NOTE_LEN = 512
+
 
 @dataclass(frozen=True, slots=True)
 class MonthCalculation:
@@ -50,6 +53,7 @@ class PaymentRow:
     amount: Decimal
     collector_name: str | None = None
     note: str | None = None
+    marked_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,6 +300,91 @@ class SubscriptionUseCases:
                 await uow.commit()
             return marked
 
+    async def set_payment_amount(
+        self,
+        actor_vk_id: int,
+        period: MonthPeriod,
+        target: str,
+        amount: Decimal | None,
+    ) -> PaymentRow:
+        """Фиксирует сумму, фактически внесённую участником за абонемент.
+
+        Нужна, когда участник заплатил не ровно сумму абонемента (часть
+        зачтена разовым посещением и т. п.) — пояснение пишется в
+        примечание (``set_payment_note``). ``None`` — вернуть сумму
+        абонемента месяца.
+        """
+        if amount is not None and (not amount.is_finite() or amount < 0):
+            raise ValidationError('Сумма не может быть отрицательной')
+        return await self._update_payment(
+            actor_vk_id,
+            period,
+            target,
+            f'amount={amount}',
+            lambda payment: setattr(payment, 'amount', amount),
+        )
+
+    async def set_payment_note(
+        self,
+        actor_vk_id: int,
+        period: MonthPeriod,
+        target: str,
+        note: str | None,
+    ) -> PaymentRow:
+        """Меняет примечание к оплате абонемента (``None`` — очистить)."""
+        if note is not None and len(note) > MAX_PAYMENT_NOTE_LEN:
+            raise ValidationError(
+                f'Примечание длиннее {MAX_PAYMENT_NOTE_LEN} символов'
+            )
+        return await self._update_payment(
+            actor_vk_id,
+            period,
+            target,
+            # Текст примечания в журнал не пишется: там бывают ФИО.
+            f'note_set={note is not None}',
+            lambda payment: setattr(payment, 'note', note),
+        )
+
+    async def _update_payment(
+        self,
+        actor_vk_id: int,
+        period: MonthPeriod,
+        target: str,
+        details: str,
+        mutate: Callable[[SubscriptionPayment], None],
+    ) -> PaymentRow:
+        async with self._uow_factory() as uow:
+            await permissions.require_role(
+                uow, self._vk, actor_vk_id, RoleName.COLLECTOR
+            )
+            subscription = await uow.subscriptions.get_for_month(period)
+            if subscription is None:
+                raise NotFoundError('Подписка на месяц не найдена')
+            user = await resolve_user(uow, target)
+            payment = await uow.subscriptions.get_payment(
+                subscription.id, user.id
+            )
+            if payment is None:
+                raise NotFoundError(
+                    'Участник не входит в список проголосовавших'
+                )
+            mutate(payment)
+            await uow.subscriptions.update_payment(payment)
+            await record_action(
+                uow,
+                actor_vk_id,
+                'subscription.edit_payment',
+                f'{period} user_id={user.id} {details}',
+            )
+            await uow.commit()
+            return PaymentRow(
+                user=user,
+                status=payment.status,
+                amount=payment.paid_amount(subscription),
+                note=payment.note,
+                marked_at=payment.marked_at,
+            )
+
     async def add_voter(
         self, actor_vk_id: int, period: MonthPeriod, target: str
     ) -> VoterChange:
@@ -424,6 +513,7 @@ class SubscriptionUseCases:
                         amount=payment.paid_amount(subscription),
                         collector_name=collector_name,
                         note=payment.note,
+                        marked_at=payment.marked_at,
                     )
                 )
             rows.sort(key=lambda r: r.user.full_name)

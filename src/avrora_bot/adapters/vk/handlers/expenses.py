@@ -6,14 +6,17 @@
 """
 
 from collections.abc import Awaitable, Callable
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from vkbottle import Bot
 from vkbottle.bot import Message
 
+from avrora_bot.adapters.reports.expenses_xlsx import build_expenses_report
 from avrora_bot.adapters.vk import keyboards
 from avrora_bot.adapters.vk.context import BotContext
+from avrora_bot.adapters.vk.gateway import VkbottleGateway
 from avrora_bot.adapters.vk.handlers import helpers
 from avrora_bot.adapters.vk.states import (
     AdjustmentState,
@@ -42,6 +45,8 @@ _EXPENSES_HELP_TEXT = (
     '• «расходы <период>» (кнопка «💬 Расходы за месяц» — текущий месяц) — '
     'список расходов в чат.\n'
     '  Пример: расходы 2026-09\n'
+    '• «расходы отчёт <период>» — расходы файлом XLSX, как вкладка '
+    '«РАСХОДЫ» таблицы клуба\n'
     '• «редактировать расход <id>» — изменить дату/сумму/тип/описание/'
     'примечание (кнопками)\n'
     '• «удалить расход <id>»\n\n'
@@ -52,6 +57,8 @@ _EXPENSES_HELP_TEXT = (
     '• «удалить передачу <id>»\n\n'
     '• «остаток [ДД.ММ.ГГГГ]» (кнопка «🏦 Остатки») — у кого сколько денег '
     'клуба на руках на дату (по умолчанию — сегодня)\n'
+    '• «остаток отчёт [ДД.ММ.ГГГГ]» — остатки файлом XLSX (вкладка '
+    '«ОСТАТОК»)\n'
     '• «мой счёт» — свой остаток с разбивкой за месяц\n\n'
     'Сборщик записывает операции только со своего счёта и правит только '
     'свои записи.'
@@ -98,8 +105,14 @@ _EXPENSE_FIELD_PROMPTS: dict[str, tuple[str, str]] = {
 }
 
 
-def register(bot: Bot, ctx: BotContext) -> None:  # noqa: C901, PLR0915
-    """Регистрирует хендлеры расходов, передач и корректировок."""
+def register(  # noqa: C901, PLR0915
+    bot: Bot, ctx: BotContext, gateway: VkbottleGateway, report_dir: Path
+) -> None:
+    """Регистрирует хендлеры расходов, передач и корректировок.
+
+    :param gateway: шлюз VK — для отправки XLSX-отчёта документом.
+    :param report_dir: каталог для сгенерированных файлов.
+    """
     dispenser = bot.state_dispenser
 
     async def _roles(vk_id: int) -> frozenset[RoleName]:
@@ -125,7 +138,7 @@ def register(bot: Bot, ctx: BotContext) -> None:  # noqa: C901, PLR0915
         return dict(peer.payload) if peer else {}
 
     def _today() -> date:
-        return datetime.now(UTC).date()
+        return ctx.clock.today()
 
     # ───────────────────────────── раздел ──────────────────────────────
 
@@ -324,6 +337,24 @@ def register(bot: Bot, ctx: BotContext) -> None:  # noqa: C901, PLR0915
             lines.append(f'  со счёта {account}: {amount} ₽')
         for part in helpers.split_message('\n'.join(lines)):
             await message.answer(part)
+
+    # Регистрируется раньше «расходы <период>»: там период — весь хвост
+    # строки, и «расходы отчёт 2026-09» разобрался бы как период.
+    @bot.on.message(text=['расходы отчёт <period>', 'расходы отчет <period>'])
+    async def expenses_report(message: Message, period: str) -> None:
+        try:
+            month = helpers.parse_period(period)
+            rows = await ctx.finance.month_expenses(message.from_id, month)
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        out_path = report_dir / f'expenses_{month}.xlsx'
+        build_expenses_report(month, rows, out_path)
+        await gateway.send_document(
+            peer_id=message.peer_id,
+            file_path=str(out_path),
+            message=f'Расходы за {month.label()}',
+        )
 
     @bot.on.message(text=['расходы <period>'])
     async def list_expenses(message: Message, period: str) -> None:

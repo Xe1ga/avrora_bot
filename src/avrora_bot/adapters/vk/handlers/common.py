@@ -1,6 +1,6 @@
 """Общие хендлеры: старт, помощь, меню, статус, просмотр календаря."""
 
-from datetime import UTC, date, datetime
+from datetime import date
 
 from vkbottle import Bot
 from vkbottle.bot import Message
@@ -59,7 +59,7 @@ def register(bot: Bot, ctx: BotContext, *, schedule_url: str) -> None:
     @bot.on.message(payload={'cmd': 'calendar'})
     @bot.on.message(text=['календарь'])
     async def calendar_current(message: Message) -> None:
-        today = datetime.now(UTC).date()
+        today = ctx.clock.today()
         period = MonthPeriod.from_date(today)
         await _show_calendar(ctx, message, period, schedule_url, from_date=today)
 
@@ -118,7 +118,7 @@ async def _show_calendar(
     Куратору и администратору к каждому событию дописывается его id —
     он нужен для «Удалить/Отменить событие» в «Календарь: управление».
     """
-    status = chat_visible_status(period, datetime.now(UTC).date())
+    status = chat_visible_status(period, ctx.clock.today())
     events = await ctx.calendar.list_month(
         period, from_date=from_date, status=status
     )

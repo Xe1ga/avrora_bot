@@ -15,9 +15,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from avrora_bot.application.services import permissions
+from avrora_bot.application.services.clock import ClubClock
 from avrora_bot.application.services.user_lookup import vk_id_label
 from avrora_bot.domain.entities import Subscription
 from avrora_bot.domain.enums import RoleName
@@ -66,15 +66,11 @@ class BalanceUseCases:
     """Расчёт остатков на дату."""
 
     def __init__(
-        self, uow_factory: UowFactory, vk_gateway: VkGateway, tz: str
+        self, uow_factory: UowFactory, vk_gateway: VkGateway, clock: ClubClock
     ) -> None:
         self._uow_factory = uow_factory
         self._vk = vk_gateway
-        self._tz = ZoneInfo(tz)
-
-    def today(self) -> date:
-        """Сегодняшняя дата в часовом поясе клуба."""
-        return datetime.now(self._tz).date()
+        self._tz = clock.tz
 
     async def balances(
         self, actor_vk_id: int, end: date, start: date | None = None

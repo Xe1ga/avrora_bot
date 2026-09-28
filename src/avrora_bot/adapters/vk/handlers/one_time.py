@@ -1,6 +1,6 @@
 """Хендлеры разовых посещений и тарифа (ТЗ 3.2 п.4)."""
 
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path
 
 from vkbottle import Bot
@@ -208,7 +208,7 @@ def register(
     async def set_one_time_tariff(message: Message, amount: str) -> None:
         try:
             value = helpers.parse_amount(amount)
-            today = datetime.now(UTC).date()
+            today = ctx.clock.today()
             await ctx.tariffs.set_tariff(
                 message.from_id, TariffKind.ONE_TIME, value, today
             )
@@ -221,7 +221,7 @@ def register(
 
     @bot.on.message(text=['посетили'])
     async def start_register_visits_today(message: Message) -> None:
-        await _start_register_visits(message, datetime.now(UTC).date())
+        await _start_register_visits(message, ctx.clock.today())
 
     @bot.on.message(text=['посетили <day>'])
     async def start_register_visits_day(message: Message, day: str) -> None:
@@ -247,7 +247,7 @@ def register(
     async def step_visit_date_for_register(message: Message) -> None:
         try:
             visit_date = helpers.parse_visit_date(
-                message.text, datetime.now(UTC).date()
+                message.text, ctx.clock.today()
             )
         except DomainError as exc:
             await message.answer(
@@ -353,7 +353,7 @@ def register(
             await message.answer('⚠️ Команда доступна только сборщику платежей.')
             return
         # Автоматизация «разовые <текущий месяц>»: месяц не спрашиваем.
-        month = MonthPeriod.from_date(datetime.now(UTC).date())
+        month = MonthPeriod.from_date(ctx.clock.today())
         await _send_month_list(message, month)
 
     @bot.on.message(text=['разовое оплатил <target>'])

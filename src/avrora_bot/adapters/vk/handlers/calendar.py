@@ -5,8 +5,6 @@
 пошаговым FSM-диалогом, по образцу handlers/one_time.py.
 """
 
-from datetime import UTC, datetime
-
 from vkbottle import Bot
 from vkbottle.bot import Message
 
@@ -214,9 +212,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
 
     @bot.on.message(payload={'cmd': 'calendar_generate_trainings'})
     async def generate_trainings(message: Message) -> None:
-        next_period = MonthPeriod.from_date(
-            datetime.now(UTC).date()
-        ).next_month()
+        next_period = MonthPeriod.from_date(ctx.clock.today()).next_month()
         try:
             result = await ctx.calendar.generate_month_trainings(
                 message.from_id, next_period

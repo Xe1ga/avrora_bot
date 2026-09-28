@@ -8,6 +8,7 @@ import pytest
 
 from avrora_bot.adapters.database.seed import seed_reference_data
 from avrora_bot.adapters.vk.handlers.balances import _format_report
+from avrora_bot.application.services.clock import ClubClock
 from avrora_bot.application.use_cases.balances import BalanceUseCases
 from avrora_bot.application.use_cases.finance import FinanceUseCases
 from avrora_bot.application.use_cases.one_time import OneTimeUseCases
@@ -41,7 +42,9 @@ class _Club:
         self.subs = SubscriptionUseCases(uow_factory, vk)
         self.one_time = OneTimeUseCases(uow_factory, vk)
         self.finance = FinanceUseCases(uow_factory, vk)
-        self.balances = BalanceUseCases(uow_factory, vk, 'Europe/Moscow')
+        self.balances = BalanceUseCases(
+            uow_factory, vk, ClubClock('Europe/Moscow')
+        )
 
     async def set_up(self) -> None:
         async with self.uow_factory() as uow:

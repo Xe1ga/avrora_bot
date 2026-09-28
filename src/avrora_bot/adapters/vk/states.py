@@ -47,6 +47,8 @@ class SubscriptionState(BaseStateGroup):
     # Чекбокс-список неоплативших под командой «абонементы <period>» —
     # мультивыбор перед массовой отметкой оплаты, см. handlers/subscriptions.py.
     MARK_SELECT = 'subscription:mark_select'
+    # Ожидание текста примечания после «примечание оплаты <период> <кто>».
+    PAYMENT_NOTE = 'subscription:payment_note'
 
 
 class OneTimeState(BaseStateGroup):

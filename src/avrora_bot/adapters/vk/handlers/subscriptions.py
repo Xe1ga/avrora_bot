@@ -27,7 +27,15 @@ _SUBSCRIPTIONS_HELP_TEXT = (
     '• «оплатил <период> <vk_id или ФИО>» / «не оплатил <период> '
     '<vk_id или ФИО>» — отметить оплату\n'
     '• «абонементы <период>» — список участников за месяц: оплатил/не '
-    'оплатил, кто собрал\n\n'
+    'оплатил, кто собрал\n'
+    '• «сумма оплаты <период> <сумма> <vk_id или ФИО>» — участник внёс '
+    'не ровно сумму абонемента (например, часть зачтена разовым); «-» '
+    'вместо суммы — вернуть сумму абонемента\n'
+    '  Пример: сумма оплаты 2026-09 2100 Ворошилова\n'
+    '• «примечание оплаты <период> <vk_id или ФИО>» — пояснение к оплате '
+    '(колонка «Примечание» отчёта); бот попросит текст отдельным '
+    'сообщением\n'
+    '• «xlsx <период>» — отчёт по абонементам файлом\n\n'
     'Вместо vk_id можно указать фамилию, «Фамилия Имя» или полное ФИО — '
     'если совпадений несколько, бот покажет список для уточнения.'
 )
@@ -171,6 +179,72 @@ def register(bot: Bot, ctx: BotContext) -> None:
     async def mark_unpaid(message: Message, period: str, target: str) -> None:
         await _mark(ctx, message, period, target, paid=False)
 
+    @bot.on.message(text=['сумма оплаты <period> <amount> <target>'])
+    async def set_payment_amount(
+        message: Message, period: str, amount: str, target: str
+    ) -> None:
+        try:
+            month = helpers.parse_period(period)
+            value = (
+                None if amount.strip() == '-' else helpers.parse_amount(amount)
+            )
+            row = await ctx.subscriptions.set_payment_amount(
+                message.from_id, month, target, value
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await message.answer(
+            f'{row.user.full_name}: сумма оплаты за {month.label()} — '
+            f'{row.amount} ₽.\nПояснение: «примечание оплаты {month} '
+            f'{row.user.full_name}».'
+        )
+
+    @bot.on.message(text=['примечание оплаты <period> <target>'])
+    async def start_payment_note(
+        message: Message, period: str, target: str
+    ) -> None:
+        roles = await ctx.user_management.effective_roles(message.from_id)
+        if not has_access(roles, RoleName.COLLECTOR):
+            await message.answer('⚠️ Команда доступна только сборщику платежей.')
+            return
+        try:
+            month = helpers.parse_period(period)
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await dispenser.set(
+            message.peer_id,
+            SubscriptionState.PAYMENT_NOTE,
+            period=str(month),
+            target=target,
+        )
+        await message.answer(
+            'Введите примечание к оплате («-» — очистить):',
+            keyboard=keyboards.cancel(),
+        )
+
+    @bot.on.message(state=SubscriptionState.PAYMENT_NOTE)
+    async def finish_payment_note(message: Message) -> None:
+        peer = await dispenser.get(message.peer_id)
+        payload = peer.payload
+        await dispenser.delete(message.peer_id)
+        try:
+            month = helpers.parse_period(payload['period'])
+            row = await ctx.subscriptions.set_payment_note(
+                message.from_id,
+                month,
+                payload['target'],
+                helpers.parse_optional(message.text),
+            )
+        except DomainError as exc:
+            await message.answer(f'⚠️ {exc}')
+            return
+        await message.answer(
+            f'{row.user.full_name}: примечание к оплате за {month.label()} '
+            + ('сохранено.' if row.note else 'очищено.')
+        )
+
     @bot.on.message(text=['абонементы <period>'])
     async def list_payments(message: Message, period: str) -> None:
         try:
@@ -183,8 +257,15 @@ def register(bot: Bot, ctx: BotContext) -> None:
         for row in summary.rows:
             mark = '✅' if row.status is PaymentStatus.PAID else '❌'
             line = f'{mark} {row.user.full_name}'
+            if (
+                row.status is PaymentStatus.PAID
+                and row.amount != summary.subscription.effective_amount
+            ):
+                line += f' ({row.amount} ₽)'
             if row.collector_name is not None:
                 line += f' — собрал: {row.collector_name}'
+            if row.note:
+                line += f' ({row.note})'
             lines.append(line)
         lines.append('')
         lines.extend(
