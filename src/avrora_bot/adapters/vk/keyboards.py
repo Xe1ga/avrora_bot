@@ -63,6 +63,7 @@ def main_menu(roles: frozenset[RoleName] = frozenset()) -> str:
             .add(Text('🎫 Разовые', payload={'cmd': 'one_time_help'}))
             .row()
             .add(Text('📊 Отчёты', payload={'cmd': 'reports_help'}))
+            .add(Text('💸 Расходы', payload={'cmd': 'expenses_help'}))
         )
     if is_curator:
         kb = kb.row().add(
@@ -152,6 +153,99 @@ def visit_date_prompt() -> str:
             Text('Отмена', payload={'cmd': 'cancel'}),
             color=KeyboardButtonColor.NEGATIVE,
         )
+    )
+    return kb.get_json()
+
+
+def expense_actions() -> str:
+    """Инлайн-кнопки раздела «Расходы» (сборщик/админ)."""
+    kb = (
+        Keyboard(inline=True)
+        .add(
+            Text('➕ Расход', payload={'cmd': 'expense_add'}),
+            color=KeyboardButtonColor.PRIMARY,
+        )
+        .add(Text('🔁 Передать', payload={'cmd': 'transfer_add'}))
+        .row()
+        .add(Text('💬 Расходы за месяц', payload={'cmd': 'expenses_chat'}))
+    )
+    return kb.get_json()
+
+
+def expense_category(cmd: str) -> str:
+    """Инлайн-кнопки выбора типа расхода.
+
+    :param cmd: команда payload — ``expense_category`` в диалоге записи,
+        ``edit_expense_field`` в правке (тогда ``field=category``).
+    """
+    kb = Keyboard(inline=True)
+    for value, label in (
+        ('hall', '🏟 Зал'),
+        ('coach', '🧑‍🏫 Тренер'),
+        ('other', '📦 Прочее'),
+    ):
+        kb = kb.add(
+            Text(
+                label,
+                payload={'cmd': cmd, 'field': 'category', 'value': value},
+            )
+        )
+    return kb.get_json()
+
+
+def date_prompt() -> str:
+    """Клавиатура шага ввода даты: «Сегодня» и «Отмена».
+
+    «Сегодня» — обычный текст, его разбирает ``helpers.parse_visit_date``.
+    """
+    kb = (
+        Keyboard(one_time=True)
+        .add(Text('Сегодня', payload={'cmd': 'date_today'}))
+        .add(
+            Text('Отмена', payload={'cmd': 'cancel'}),
+            color=KeyboardButtonColor.NEGATIVE,
+        )
+    )
+    return kb.get_json()
+
+
+def own_account_prompt() -> str:
+    """Шаг «с чьего счёта» для администратора: «Мой счёт» и «Отмена»."""
+    kb = (
+        Keyboard(one_time=True)
+        .add(Text('Мой счёт', payload={'cmd': 'own_account'}))
+        .add(
+            Text('Отмена', payload={'cmd': 'cancel'}),
+            color=KeyboardButtonColor.NEGATIVE,
+        )
+    )
+    return kb.get_json()
+
+
+def edit_expense_fields(*, is_admin: bool) -> str:
+    """Инлайн-кнопки выбора редактируемого поля расхода.
+
+    «Счёт» показывается только администратору — перенос расхода на
+    чужой счёт сборщику недоступен (см. ``FinanceUseCases``).
+    """
+
+    def field(label: str, name: str) -> Text:
+        return Text(label, payload={'cmd': 'edit_expense_field', 'field': name})
+
+    kb = (
+        Keyboard(inline=True)
+        .add(field('Дата', 'date'))
+        .add(field('Сумма', 'amount'))
+        .add(field('Тип', 'category'))
+        .row()
+        .add(field('Описание', 'description'))
+        .add(field('Примечание', 'note'))
+    )
+    if is_admin:
+        kb = kb.row().add(field('Счёт', 'account'))
+    kb = kb.row().add(
+        Text('✅ Готово', payload={'cmd': 'edit_expense_done'}),
+        color=KeyboardButtonColor.POSITIVE,
     )
     return kb.get_json()
 

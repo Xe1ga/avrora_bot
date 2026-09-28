@@ -101,3 +101,48 @@ class CalendarManageState(BaseStateGroup):
     ADD_PLACE = 'calendar_manage:add_place'
     DELETE_ID = 'calendar_manage:delete_id'
     CANCEL_ID = 'calendar_manage:cancel_id'
+
+
+class ExpenseState(BaseStateGroup):
+    """Пошаговая запись расхода кнопкой «➕ Расход».
+
+    Тип → сумма → описание → дата → (только админ) с чьего счёта. Та же
+    операция доступна быстрой командой «расход <сумма> <описание>».
+    """
+
+    CATEGORY = 'expense:category'
+    AMOUNT = 'expense:amount'
+    DESCRIPTION = 'expense:description'
+    DATE = 'expense:date'
+    ACCOUNT = 'expense:account'
+
+
+class ExpenseEditState(BaseStateGroup):
+    """Правка расхода по id («редактировать расход <id>»)."""
+
+    SELECT_FIELD = 'expense_edit:select_field'
+    DATE = 'expense_edit:date'
+    AMOUNT = 'expense_edit:amount'
+    DESCRIPTION = 'expense_edit:description'
+    NOTE = 'expense_edit:note'
+    ACCOUNT = 'expense_edit:account'
+
+
+class TransferState(BaseStateGroup):
+    """Передача денег кнопкой «🔁 Передать»: кому → сумма → примечание."""
+
+    TARGET = 'transfer:target'
+    AMOUNT = 'transfer:amount'
+    NOTE = 'transfer:note'
+
+
+class AdjustmentState(BaseStateGroup):
+    """Корректировка остатка администратором («корректировка»).
+
+    Чей счёт → сумма со знаком → дата → причина.
+    """
+
+    TARGET = 'adjustment:target'
+    AMOUNT = 'adjustment:amount'
+    DATE = 'adjustment:date'
+    REASON = 'adjustment:reason'

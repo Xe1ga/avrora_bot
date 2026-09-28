@@ -10,6 +10,7 @@ from avrora_bot.adapters.vk.handlers import (
     admin,
     calendar,
     common,
+    expenses,
     one_time,
     players,
     registration,
@@ -45,6 +46,7 @@ def register_handlers(
     players.register(bot, ctx)
     subscriptions.register(bot, ctx)
     one_time.register(bot, ctx, gateway, report_dir)
+    expenses.register(bot, ctx)
     calendar.register(bot, ctx)
     reports.register(bot, ctx, gateway, report_dir)
     common.register(bot, ctx, schedule_url=schedule_url)

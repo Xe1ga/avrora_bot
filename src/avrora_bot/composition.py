@@ -19,6 +19,7 @@ from avrora_bot.adapters.vk.bot import build_bot
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.gateway import VkbottleGateway
 from avrora_bot.application.use_cases.calendar import CalendarUseCases
+from avrora_bot.application.use_cases.finance import FinanceUseCases
 from avrora_bot.application.use_cases.legal import LegalUseCases
 from avrora_bot.application.use_cases.one_time import OneTimeUseCases
 from avrora_bot.application.use_cases.registration import RegistrationUseCases
@@ -72,6 +73,7 @@ def build_container(settings: Settings) -> Container:
         calendar=CalendarUseCases(uow_factory, gateway),
         reports=ReportUseCases(uow_factory, subscriptions),
         user_management=UserManagementUseCases(uow_factory, gateway),
+        finance=FinanceUseCases(uow_factory, gateway),
     )
 
     report_dir = Path('/tmp/avrora_reports')

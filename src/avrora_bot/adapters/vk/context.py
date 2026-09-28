@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from avrora_bot.application.use_cases.calendar import CalendarUseCases
+from avrora_bot.application.use_cases.finance import FinanceUseCases
 from avrora_bot.application.use_cases.legal import LegalUseCases
 from avrora_bot.application.use_cases.one_time import OneTimeUseCases
 from avrora_bot.application.use_cases.registration import RegistrationUseCases
@@ -28,3 +29,4 @@ class BotContext:
     calendar: CalendarUseCases
     reports: ReportUseCases
     user_management: UserManagementUseCases
+    finance: FinanceUseCases
