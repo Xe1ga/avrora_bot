@@ -108,6 +108,18 @@ def parse_amount(raw: str) -> Decimal:
         raise ValidationError('Сумма должна быть числом') from exc
 
 
+def format_money(amount: Decimal) -> str:
+    """Сумма для сообщений: «60 900», «1 450,50» — пробел между разрядами.
+
+    Целые рубли — без «,00», как в таблицах клуба.
+    """
+    if amount == amount.to_integral_value():
+        text = f'{int(amount):,}'
+    else:
+        text = f'{amount:,.2f}'.replace('.', '|')
+    return text.replace(',', '\u00a0').replace('|', ',')
+
+
 def parse_optional(raw: str) -> str | None:
     """Пустая строка/«-» → ``None``, иначе — обрезанный текст как есть."""
     stripped = raw.strip()

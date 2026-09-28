@@ -18,6 +18,7 @@ from avrora_bot.adapters.database.unit_of_work import SqlAlchemyUnitOfWork
 from avrora_bot.adapters.vk.bot import build_bot
 from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.gateway import VkbottleGateway
+from avrora_bot.application.use_cases.balances import BalanceUseCases
 from avrora_bot.application.use_cases.calendar import CalendarUseCases
 from avrora_bot.application.use_cases.finance import FinanceUseCases
 from avrora_bot.application.use_cases.legal import LegalUseCases
@@ -74,6 +75,7 @@ def build_container(settings: Settings) -> Container:
         reports=ReportUseCases(uow_factory, subscriptions),
         user_management=UserManagementUseCases(uow_factory, gateway),
         finance=FinanceUseCases(uow_factory, gateway),
+        balances=BalanceUseCases(uow_factory, gateway, settings.tz),
     )
 
     report_dir = Path('/tmp/avrora_reports')

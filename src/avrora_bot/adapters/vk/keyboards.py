@@ -168,6 +168,7 @@ def expense_actions() -> str:
         .add(Text('🔁 Передать', payload={'cmd': 'transfer_add'}))
         .row()
         .add(Text('💬 Расходы за месяц', payload={'cmd': 'expenses_chat'}))
+        .add(Text('🏦 Остатки', payload={'cmd': 'balances_chat'}))
     )
     return kb.get_json()
 
