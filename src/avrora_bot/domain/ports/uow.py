@@ -9,9 +9,12 @@ from types import TracebackType
 from typing import Protocol
 
 from avrora_bot.domain.ports.repositories import (
+    AccountTransferRepository,
     ActionLogRepository,
+    BalanceAdjustmentRepository,
     CalendarRepository,
     ConsentRepository,
+    ExpenseRepository,
     LegalDocumentRepository,
     OneTimeRepository,
     RoleRepository,
@@ -35,6 +38,9 @@ class UnitOfWork(Protocol):
     action_log: ActionLogRepository
     legal_documents: LegalDocumentRepository
     consents: ConsentRepository
+    expenses: ExpenseRepository
+    transfers: AccountTransferRepository
+    balance_adjustments: BalanceAdjustmentRepository
 
     async def __aenter__(self) -> UnitOfWork: ...
 

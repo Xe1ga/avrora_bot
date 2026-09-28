@@ -8,9 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from avrora_bot.adapters.database.crypto import PiiCipher
 from avrora_bot.adapters.database.repositories import (
+    SqlAccountTransferRepository,
     SqlActionLogRepository,
+    SqlBalanceAdjustmentRepository,
     SqlCalendarRepository,
     SqlConsentRepository,
+    SqlExpenseRepository,
     SqlLegalDocumentRepository,
     SqlOneTimeRepository,
     SqlRoleRepository,
@@ -53,6 +56,9 @@ class SqlAlchemyUnitOfWork:
         self.action_log = SqlActionLogRepository(s)
         self.legal_documents = SqlLegalDocumentRepository(s)
         self.consents = SqlConsentRepository(s)
+        self.expenses = SqlExpenseRepository(s)
+        self.transfers = SqlAccountTransferRepository(s)
+        self.balance_adjustments = SqlBalanceAdjustmentRepository(s)
         return self
 
     async def __aexit__(

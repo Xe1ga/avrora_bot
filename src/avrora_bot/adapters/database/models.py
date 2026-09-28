@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -33,6 +34,7 @@ from avrora_bot.adapters.database.base import Base, TimestampMixin
 from avrora_bot.domain.enums import (
     EventStatus,
     EventType,
+    ExpenseCategory,
     LegalDocumentKind,
     PaymentStatus,
     RoleName,
@@ -48,6 +50,8 @@ _ENUM_LEN = 32
 _DOC_VERSION_LEN = 32
 _URL_LEN = 512
 _SHA256_LEN = 64
+_EXPENSE_DESCRIPTION_LEN = 256
+_ADJUSTMENT_REASON_LEN = 256
 
 
 class UserRole(Base):
@@ -322,6 +326,13 @@ class SubscriptionPayment(Base):
     collector_vk_id: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )
+    # Фактически внесённая сумма, если отличается от суммы абонемента;
+    # NULL — внесена ровно сумма абонемента месяца (effective_amount).
+    amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    # Свободное примечание сборщика — колонка «Примечание» отчёта.
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     subscription: Mapped[Subscription] = relationship(back_populates='payments')
 
@@ -370,6 +381,79 @@ class CalendarEvent(Base):
         default=EventStatus.PLANNED,
         server_default=EventStatus.PLANNED.value,
     )
+
+
+class Expense(Base, TimestampMixin):
+    """Расход клубных денег со счёта человека (вкладка «РАСХОДЫ»).
+
+    FK на ``users`` — ``RESTRICT``: финансовая история не должна исчезать
+    вместе с пользователем (строки ``users`` и так не удаляются физически,
+    см. ``UserStatus.DELETED``).
+    """
+
+    __tablename__ = 'expenses'
+    __table_args__ = (
+        CheckConstraint('amount > 0', name='ck_expenses_amount_positive'),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    spent_on: Mapped[date] = mapped_column(Date, index=True)
+    category: Mapped[ExpenseCategory] = mapped_column(String(_ENUM_LEN))
+    description: Mapped[str] = mapped_column(String(_EXPENSE_DESCRIPTION_LEN))
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    account_user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='RESTRICT'), index=True
+    )
+    created_by_vk_id: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AccountTransfer(Base, TimestampMixin):
+    """Передача клубных денег от одного человека другому."""
+
+    __tablename__ = 'account_transfers'
+    __table_args__ = (
+        CheckConstraint(
+            'amount > 0', name='ck_account_transfers_amount_positive'
+        ),
+        CheckConstraint(
+            'from_user_id <> to_user_id',
+            name='ck_account_transfers_distinct_users',
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    transferred_on: Mapped[date] = mapped_column(Date, index=True)
+    from_user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='RESTRICT'), index=True
+    )
+    to_user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='RESTRICT'), index=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    created_by_vk_id: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class BalanceAdjustment(Base, TimestampMixin):
+    """Ручная корректировка остатка (начальный остаток, исправление)."""
+
+    __tablename__ = 'balance_adjustments'
+    __table_args__ = (
+        CheckConstraint(
+            'amount <> 0', name='ck_balance_adjustments_amount_nonzero'
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    adjusted_on: Mapped[date] = mapped_column(Date, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='RESTRICT'), index=True
+    )
+    # Со знаком: «+» — добавить на счёт, «−» — списать.
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    reason: Mapped[str] = mapped_column(String(_ADJUSTMENT_REASON_LEN))
+    created_by_vk_id: Mapped[int] = mapped_column(Integer)
 
 
 class ActionLog(Base, TimestampMixin):

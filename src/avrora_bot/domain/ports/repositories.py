@@ -4,13 +4,16 @@
 находятся в ``adapters/database/repositories.py``.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Protocol
 
 from avrora_bot.domain.entities import (
+    AccountTransfer,
     ActionLogEntry,
+    BalanceAdjustment,
     CalendarEvent,
     ConsentRecord,
+    Expense,
     LegalDocument,
     OneTimePayment,
     ScheduleSlot,
@@ -111,6 +114,8 @@ class SubscriptionRepository(Protocol):
 
     async def create(self, subscription: Subscription) -> Subscription: ...
 
+    async def get(self, subscription_id: int) -> Subscription | None: ...
+
     async def update(self, subscription: Subscription) -> None: ...
 
     async def add_payment(
@@ -128,6 +133,12 @@ class SubscriptionRepository(Protocol):
     async def update_payment(self, payment: SubscriptionPayment) -> None: ...
 
     async def delete_payment(self, payment_id: int) -> None: ...
+
+    async def paid_payments_until(
+        self, until: datetime
+    ) -> list[SubscriptionPayment]:
+        """Оплаченные строки с ``marked_at <= until`` (``until`` — UTC)."""
+        ...
 
 
 class OneTimeRepository(Protocol):
@@ -147,6 +158,10 @@ class OneTimeRepository(Protocol):
 
     async def delete_visit(self, visit_id: int) -> None: ...
 
+    async def paid_visits_until(self, until: datetime) -> list[OneTimePayment]:
+        """Оплаченные визиты с ``marked_at <= until`` (``until`` — UTC)."""
+        ...
+
 
 class CalendarRepository(Protocol):
     """События календаря."""
@@ -165,6 +180,56 @@ class CalendarRepository(Protocol):
 
     async def list_planned_until(self, day: date) -> list[CalendarEvent]:
         """Запланированные события с датой не позже ``day``."""
+        ...
+
+
+class ExpenseRepository(Protocol):
+    """Расходы клубных денег."""
+
+    async def add(self, expense: Expense) -> Expense: ...
+
+    async def get(self, expense_id: int) -> Expense | None: ...
+
+    async def update(self, expense: Expense) -> None: ...
+
+    async def delete(self, expense_id: int) -> None: ...
+
+    async def list_for_month(self, period: MonthPeriod) -> list[Expense]: ...
+
+    async def list_until(self, day: date) -> list[Expense]:
+        """Расходы с датой не позже ``day``."""
+        ...
+
+
+class AccountTransferRepository(Protocol):
+    """Передачи денег между людьми."""
+
+    async def add(self, transfer: AccountTransfer) -> AccountTransfer: ...
+
+    async def get(self, transfer_id: int) -> AccountTransfer | None: ...
+
+    async def delete(self, transfer_id: int) -> None: ...
+
+    async def list_for_month(
+        self, period: MonthPeriod
+    ) -> list[AccountTransfer]: ...
+
+    async def list_until(self, day: date) -> list[AccountTransfer]:
+        """Передачи с датой не позже ``day``."""
+        ...
+
+
+class BalanceAdjustmentRepository(Protocol):
+    """Ручные корректировки остатков."""
+
+    async def add(self, adjustment: BalanceAdjustment) -> BalanceAdjustment: ...
+
+    async def get(self, adjustment_id: int) -> BalanceAdjustment | None: ...
+
+    async def delete(self, adjustment_id: int) -> None: ...
+
+    async def list_until(self, day: date) -> list[BalanceAdjustment]:
+        """Корректировки с датой не позже ``day``."""
         ...
 
 

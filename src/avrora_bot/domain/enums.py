@@ -69,6 +69,18 @@ class TariffKind(StrEnum):
     ONE_TIME = 'one_time'  # разовое посещение
 
 
+class ExpenseCategory(StrEnum):
+    """Тип расхода (колонка «Тип расхода» вкладки «РАСХОДЫ»).
+
+    Справочника получателей нет: кому именно заплатили (тренер, зал) —
+    свободное описание расхода, ``Expense.description``.
+    """
+
+    HALL = 'hall'  # оплата зала
+    COACH = 'coach'  # оплата тренеру
+    OTHER = 'other'  # прочее
+
+
 class Weekday(StrEnum):
     """День недели для шаблона расписания (соответствует date.weekday())."""
 

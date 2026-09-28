@@ -5,7 +5,7 @@
 доменные сущности и обратно.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from avrora_bot.domain import entities as e
 from avrora_bot.domain.enums import (
     EventStatus,
     EventType,
+    ExpenseCategory,
     LegalDocumentKind,
     PaymentStatus,
     RoleName,
@@ -102,6 +103,8 @@ def _sub_payment_to_domain(
         status=PaymentStatus(row.status),
         marked_at=row.marked_at,
         collector_vk_id=row.collector_vk_id,
+        amount=row.amount,
+        note=row.note,
     )
 
 
@@ -115,6 +118,45 @@ def _one_time_to_domain(row: m.OneTimePayment) -> e.OneTimePayment:
         marked_at=row.marked_at,
         collector_vk_id=row.collector_vk_id,
         note=row.note,
+    )
+
+
+def _expense_to_domain(row: m.Expense) -> e.Expense:
+    return e.Expense(
+        id=row.id,
+        spent_on=row.spent_on,
+        category=ExpenseCategory(row.category),
+        description=row.description,
+        amount=row.amount,
+        account_user_id=row.account_user_id,
+        created_by_vk_id=row.created_by_vk_id,
+        note=row.note,
+        created_at=row.created_at,
+    )
+
+
+def _transfer_to_domain(row: m.AccountTransfer) -> e.AccountTransfer:
+    return e.AccountTransfer(
+        id=row.id,
+        transferred_on=row.transferred_on,
+        from_user_id=row.from_user_id,
+        to_user_id=row.to_user_id,
+        amount=row.amount,
+        created_by_vk_id=row.created_by_vk_id,
+        note=row.note,
+        created_at=row.created_at,
+    )
+
+
+def _adjustment_to_domain(row: m.BalanceAdjustment) -> e.BalanceAdjustment:
+    return e.BalanceAdjustment(
+        id=row.id,
+        adjusted_on=row.adjusted_on,
+        user_id=row.user_id,
+        amount=row.amount,
+        reason=row.reason,
+        created_by_vk_id=row.created_by_vk_id,
+        created_at=row.created_at,
     )
 
 
@@ -379,6 +421,10 @@ class SqlSubscriptionRepository:
         await self._s.flush()
         return _subscription_to_domain(row)
 
+    async def get(self, subscription_id: int) -> e.Subscription | None:
+        row = await self._s.get(m.Subscription, subscription_id)
+        return _subscription_to_domain(row) if row else None
+
     async def update(self, subscription: e.Subscription) -> None:
         row = await self._s.get(m.Subscription, subscription.id)
         if row is None:
@@ -398,6 +444,8 @@ class SqlSubscriptionRepository:
             status=payment.status,
             marked_at=payment.marked_at,
             collector_vk_id=payment.collector_vk_id,
+            amount=payment.amount,
+            note=payment.note,
         )
         self._s.add(row)
         await self._s.flush()
@@ -431,6 +479,8 @@ class SqlSubscriptionRepository:
         row.status = payment.status
         row.marked_at = payment.marked_at
         row.collector_vk_id = payment.collector_vk_id
+        row.amount = payment.amount
+        row.note = payment.note
         await self._s.flush()
 
     async def delete_payment(self, payment_id: int) -> None:
@@ -438,6 +488,19 @@ class SqlSubscriptionRepository:
         if row is not None:
             await self._s.delete(row)
             await self._s.flush()
+
+    async def paid_payments_until(
+        self, until: datetime
+    ) -> list[e.SubscriptionPayment]:
+        rows = await self._s.scalars(
+            select(m.SubscriptionPayment)
+            .where(
+                m.SubscriptionPayment.status == PaymentStatus.PAID,
+                m.SubscriptionPayment.marked_at <= until,
+            )
+            .order_by(m.SubscriptionPayment.marked_at)
+        )
+        return [_sub_payment_to_domain(r) for r in rows]
 
 
 class SqlOneTimeRepository:
@@ -506,6 +569,19 @@ class SqlOneTimeRepository:
             await self._s.delete(row)
             await self._s.flush()
 
+    async def paid_visits_until(
+        self, until: datetime
+    ) -> list[e.OneTimePayment]:
+        rows = await self._s.scalars(
+            select(m.OneTimePayment)
+            .where(
+                m.OneTimePayment.status == PaymentStatus.PAID,
+                m.OneTimePayment.marked_at <= until,
+            )
+            .order_by(m.OneTimePayment.marked_at)
+        )
+        return [_one_time_to_domain(r) for r in rows]
+
 
 class SqlCalendarRepository:
     """Репозиторий событий календаря."""
@@ -570,6 +646,159 @@ class SqlCalendarRepository:
             )
         )
         return [_event_to_domain(r) for r in rows]
+
+
+class SqlExpenseRepository:
+    """Репозиторий расходов."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, expense: e.Expense) -> e.Expense:
+        row = m.Expense(
+            spent_on=expense.spent_on,
+            category=expense.category,
+            description=expense.description,
+            amount=expense.amount,
+            account_user_id=expense.account_user_id,
+            created_by_vk_id=expense.created_by_vk_id,
+            note=expense.note,
+        )
+        self._s.add(row)
+        await self._s.flush()
+        await self._s.refresh(row)
+        return _expense_to_domain(row)
+
+    async def get(self, expense_id: int) -> e.Expense | None:
+        row = await self._s.get(m.Expense, expense_id)
+        return _expense_to_domain(row) if row else None
+
+    async def update(self, expense: e.Expense) -> None:
+        row = await self._s.get(m.Expense, expense.id)
+        if row is None:
+            return
+        row.spent_on = expense.spent_on
+        row.category = expense.category
+        row.description = expense.description
+        row.amount = expense.amount
+        row.account_user_id = expense.account_user_id
+        row.note = expense.note
+        await self._s.flush()
+
+    async def delete(self, expense_id: int) -> None:
+        row = await self._s.get(m.Expense, expense_id)
+        if row is not None:
+            await self._s.delete(row)
+            await self._s.flush()
+
+    async def list_for_month(self, period: MonthPeriod) -> list[e.Expense]:
+        rows = await self._s.scalars(
+            select(m.Expense)
+            .where(
+                m.Expense.spent_on >= period.first_day,
+                m.Expense.spent_on <= period.last_day,
+            )
+            .order_by(m.Expense.spent_on, m.Expense.id)
+        )
+        return [_expense_to_domain(r) for r in rows]
+
+    async def list_until(self, day: date) -> list[e.Expense]:
+        rows = await self._s.scalars(
+            select(m.Expense)
+            .where(m.Expense.spent_on <= day)
+            .order_by(m.Expense.spent_on, m.Expense.id)
+        )
+        return [_expense_to_domain(r) for r in rows]
+
+
+class SqlAccountTransferRepository:
+    """Репозиторий передач денег между людьми."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, transfer: e.AccountTransfer) -> e.AccountTransfer:
+        row = m.AccountTransfer(
+            transferred_on=transfer.transferred_on,
+            from_user_id=transfer.from_user_id,
+            to_user_id=transfer.to_user_id,
+            amount=transfer.amount,
+            created_by_vk_id=transfer.created_by_vk_id,
+            note=transfer.note,
+        )
+        self._s.add(row)
+        await self._s.flush()
+        await self._s.refresh(row)
+        return _transfer_to_domain(row)
+
+    async def get(self, transfer_id: int) -> e.AccountTransfer | None:
+        row = await self._s.get(m.AccountTransfer, transfer_id)
+        return _transfer_to_domain(row) if row else None
+
+    async def delete(self, transfer_id: int) -> None:
+        row = await self._s.get(m.AccountTransfer, transfer_id)
+        if row is not None:
+            await self._s.delete(row)
+            await self._s.flush()
+
+    async def list_for_month(
+        self, period: MonthPeriod
+    ) -> list[e.AccountTransfer]:
+        rows = await self._s.scalars(
+            select(m.AccountTransfer)
+            .where(
+                m.AccountTransfer.transferred_on >= period.first_day,
+                m.AccountTransfer.transferred_on <= period.last_day,
+            )
+            .order_by(m.AccountTransfer.transferred_on, m.AccountTransfer.id)
+        )
+        return [_transfer_to_domain(r) for r in rows]
+
+    async def list_until(self, day: date) -> list[e.AccountTransfer]:
+        rows = await self._s.scalars(
+            select(m.AccountTransfer)
+            .where(m.AccountTransfer.transferred_on <= day)
+            .order_by(m.AccountTransfer.transferred_on, m.AccountTransfer.id)
+        )
+        return [_transfer_to_domain(r) for r in rows]
+
+
+class SqlBalanceAdjustmentRepository:
+    """Репозиторий ручных корректировок остатков."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, adjustment: e.BalanceAdjustment) -> e.BalanceAdjustment:
+        row = m.BalanceAdjustment(
+            adjusted_on=adjustment.adjusted_on,
+            user_id=adjustment.user_id,
+            amount=adjustment.amount,
+            reason=adjustment.reason,
+            created_by_vk_id=adjustment.created_by_vk_id,
+        )
+        self._s.add(row)
+        await self._s.flush()
+        await self._s.refresh(row)
+        return _adjustment_to_domain(row)
+
+    async def get(self, adjustment_id: int) -> e.BalanceAdjustment | None:
+        row = await self._s.get(m.BalanceAdjustment, adjustment_id)
+        return _adjustment_to_domain(row) if row else None
+
+    async def delete(self, adjustment_id: int) -> None:
+        row = await self._s.get(m.BalanceAdjustment, adjustment_id)
+        if row is not None:
+            await self._s.delete(row)
+            await self._s.flush()
+
+    async def list_until(self, day: date) -> list[e.BalanceAdjustment]:
+        rows = await self._s.scalars(
+            select(m.BalanceAdjustment)
+            .where(m.BalanceAdjustment.adjusted_on <= day)
+            .order_by(m.BalanceAdjustment.adjusted_on, m.BalanceAdjustment.id)
+        )
+        return [_adjustment_to_domain(r) for r in rows]
 
 
 class SqlActionLogRepository:

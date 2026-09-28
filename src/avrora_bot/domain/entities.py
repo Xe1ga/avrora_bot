@@ -11,6 +11,7 @@ from decimal import Decimal
 from avrora_bot.domain.enums import (
     EventStatus,
     EventType,
+    ExpenseCategory,
     LegalDocumentKind,
     PaymentStatus,
     RoleName,
@@ -155,7 +156,22 @@ class SubscriptionPayment:
     # vk_id сборщика, который фактически собрал оплату (не всегда тот же,
     # кто её отметил в боте — см. OneTimeUseCases.set_visit_collector).
     collector_vk_id: int | None = None
+    # Фактически внесённая сумма, если она отличается от суммы абонемента
+    # (например, часть абонемента зачтена разовым посещением); ``None`` —
+    # внесена ровно ``Subscription.effective_amount``.
+    amount: Decimal | None = None
+    # Свободное примечание сборщика (колонка «Примечание» отчёта) —
+    # пояснение к нестандартной сумме и т. п.
+    note: str | None = None
     id: int | None = None
+
+    def paid_amount(self, subscription: Subscription) -> Decimal:
+        """Сумма, которую участник вносит по этой строке оплаты."""
+        return (
+            self.amount
+            if self.amount is not None
+            else subscription.effective_amount
+        )
 
 
 @dataclass(slots=True)
@@ -173,6 +189,58 @@ class OneTimePayment:
     # Свободное примечание сборщика (колонка «Примечание» отчёта).
     note: str | None = None
     id: int | None = None
+
+
+@dataclass(slots=True)
+class Expense:
+    """Расход клубных денег со счёта конкретного человека.
+
+    «Счёт» — это человек, у которого на руках деньги клуба (сборщик или
+    бывший сборщик), а не банковский счёт: ``account_user_id`` — с чьих
+    денег оплачено.
+    """
+
+    spent_on: date
+    category: ExpenseCategory
+    description: str  # «Оплата тренер Елена», «Оплата зала сентябрь»
+    amount: Decimal  # всегда > 0
+    account_user_id: int
+    created_by_vk_id: int
+    note: str | None = None
+    id: int | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class AccountTransfer:
+    """Передача клубных денег от одного человека другому."""
+
+    transferred_on: date
+    from_user_id: int
+    to_user_id: int
+    amount: Decimal  # всегда > 0
+    created_by_vk_id: int
+    note: str | None = None
+    id: int | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class BalanceAdjustment:
+    """Ручная корректировка остатка на счёте (вносит администратор).
+
+    Начальный остаток на дату запуска учёта (деньги, собранные до бота)
+    или исправление расхождения с реальными деньгами на руках. Сумма со
+    знаком: «+» — добавить, «−» — списать.
+    """
+
+    adjusted_on: date
+    user_id: int
+    amount: Decimal  # != 0
+    reason: str
+    created_by_vk_id: int
+    id: int | None = None
+    created_at: datetime | None = None
 
 
 @dataclass(slots=True)

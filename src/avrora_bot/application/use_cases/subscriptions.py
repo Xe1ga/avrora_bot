@@ -45,7 +45,11 @@ class PaymentRow:
 
     user: User
     status: PaymentStatus
+    # Сумма, которую участник вносит по этой строке — фактическая, если
+    # задана, иначе сумма абонемента (``SubscriptionPayment.paid_amount``).
+    amount: Decimal
     collector_name: str | None = None
+    note: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +73,11 @@ class MonthSummary:
 
     @property
     def collected(self) -> Decimal:
-        return self.subscription.effective_amount * self.paid_count
+        """Собрано по факту — с учётом нестандартных сумм отдельных строк."""
+        return sum(
+            (r.amount for r in self.rows if r.status is PaymentStatus.PAID),
+            Decimal(0),
+        )
 
 
 class SubscriptionUseCases:
@@ -413,7 +421,9 @@ class SubscriptionUseCases:
                     PaymentRow(
                         user=user,
                         status=payment.status,
+                        amount=payment.paid_amount(subscription),
                         collector_name=collector_name,
+                        note=payment.note,
                     )
                 )
             rows.sort(key=lambda r: r.user.full_name)
