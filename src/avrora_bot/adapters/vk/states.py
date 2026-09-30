@@ -148,3 +148,14 @@ class AdjustmentState(BaseStateGroup):
     AMOUNT = 'adjustment:amount'
     DATE = 'adjustment:date'
     REASON = 'adjustment:reason'
+
+
+class BirthdayState(BaseStateGroup):
+    """Диалоги раздела «Дни рождения» поздравителя (ТЗ 3.4).
+
+    Ожидание списка vk_id/ФИО после кнопок «Подписаться» и «Отписаться» —
+    см. handlers/birthdays.py.
+    """
+
+    SUBSCRIBE = 'birthday:subscribe'
+    UNSUBSCRIBE = 'birthday:unsubscribe'

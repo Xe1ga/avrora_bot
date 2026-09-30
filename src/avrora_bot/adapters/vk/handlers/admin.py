@@ -24,7 +24,7 @@ _ADMIN_HELP_TEXT = (
     '• «удалить пользователя <vk_id или ФИО>» — уничтожить персональные '
     'данные\n'
     '  (ФИО/телефон/ДР/рост) по отзыву согласия, ст. 21 152-ФЗ\n\n'
-    'Роли: админ/сборщик/куратор/игрок.'
+    'Роли: админ/сборщик/куратор/поздравитель/игрок.'
 )
 
 # Текст, которым администратор подтверждает уничтожение персональных
@@ -41,6 +41,8 @@ _ROLE_ALIASES = {
     'collector': RoleName.COLLECTOR,
     'куратор': RoleName.CURATOR,
     'curator': RoleName.CURATOR,
+    'поздравитель': RoleName.GREETER,
+    'greeter': RoleName.GREETER,
     'игрок': RoleName.PLAYER,
     'player': RoleName.PLAYER,
 }
@@ -99,7 +101,7 @@ def register(bot: Bot, ctx: BotContext) -> None:
         role_enum = _parse_role(role)
         if role_enum is None:
             await message.answer(
-                'Роль: админ/сборщик/куратор/игрок. '
+                'Роль: админ/сборщик/куратор/поздравитель/игрок. '
                 'Пример: добавить 12345 игрок Иван Иванов'
             )
             return

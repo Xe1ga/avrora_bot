@@ -8,7 +8,8 @@ class RoleName(StrEnum):
 
     ADMIN = 'admin'
     COLLECTOR = 'collector'  # сборщик платежей
-    CURATOR = 'curator'  # куратор (ДР, календарь)
+    CURATOR = 'curator'  # куратор (календарь)
+    GREETER = 'greeter'  # поздравитель (напоминания о ДР)
     PLAYER = 'player'  # игрок
 
 
@@ -25,6 +26,14 @@ class UserStatus(StrEnum):
     # сняты. Повторная self_register с тем же vk_id разрешена и переводит
     # статус обратно в pending.
     DELETED = 'deleted'
+
+
+class BirthdayReminderKind(StrEnum):
+    """Вид напоминания о дне рождения (журнал ``birthday_reminders``)."""
+
+    TEN_DAYS = 'ten_days'  # заранее, за 10 дней (или позже, если догоняем)
+    ON_DAY = 'on_day'  # в сам день рождения
+    NEXT_MONTH = 'next_month'  # сводка в последний день месяца на следующий
 
 
 class PaymentStatus(StrEnum):

@@ -12,6 +12,8 @@ from avrora_bot.domain.ports.repositories import (
     AccountTransferRepository,
     ActionLogRepository,
     BalanceAdjustmentRepository,
+    BirthdayReminderRepository,
+    BirthdaySubscriptionRepository,
     CalendarRepository,
     ConsentRepository,
     ExpenseRepository,
@@ -41,6 +43,8 @@ class UnitOfWork(Protocol):
     expenses: ExpenseRepository
     transfers: AccountTransferRepository
     balance_adjustments: BalanceAdjustmentRepository
+    birthday_subscriptions: BirthdaySubscriptionRepository
+    birthday_reminders: BirthdayReminderRepository
 
     async def __aenter__(self) -> UnitOfWork: ...
 

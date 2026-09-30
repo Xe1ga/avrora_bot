@@ -11,6 +11,8 @@ from avrora_bot.adapters.database.repositories import (
     SqlAccountTransferRepository,
     SqlActionLogRepository,
     SqlBalanceAdjustmentRepository,
+    SqlBirthdayReminderRepository,
+    SqlBirthdaySubscriptionRepository,
     SqlCalendarRepository,
     SqlConsentRepository,
     SqlExpenseRepository,
@@ -59,6 +61,8 @@ class SqlAlchemyUnitOfWork:
         self.expenses = SqlExpenseRepository(s)
         self.transfers = SqlAccountTransferRepository(s)
         self.balance_adjustments = SqlBalanceAdjustmentRepository(s)
+        self.birthday_subscriptions = SqlBirthdaySubscriptionRepository(s)
+        self.birthday_reminders = SqlBirthdayReminderRepository(s)
         return self
 
     async def __aexit__(

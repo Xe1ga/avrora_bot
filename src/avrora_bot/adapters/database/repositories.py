@@ -7,7 +7,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,6 +15,7 @@ from avrora_bot.adapters.database import models as m
 from avrora_bot.adapters.database.crypto import PiiCipher
 from avrora_bot.domain import entities as e
 from avrora_bot.domain.enums import (
+    BirthdayReminderKind,
     EventStatus,
     EventType,
     ExpenseCategory,
@@ -799,6 +800,117 @@ class SqlBalanceAdjustmentRepository:
             .order_by(m.BalanceAdjustment.adjusted_on, m.BalanceAdjustment.id)
         )
         return [_adjustment_to_domain(r) for r in rows]
+
+
+class SqlBirthdaySubscriptionRepository:
+    """Репозиторий подписок на дни рождения."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, subscriber_user_id: int, target_user_id: int) -> None:
+        exists = await self._s.scalar(
+            select(m.BirthdaySubscription.id).where(
+                m.BirthdaySubscription.subscriber_user_id == subscriber_user_id,
+                m.BirthdaySubscription.target_user_id == target_user_id,
+            )
+        )
+        if exists is None:
+            self._s.add(
+                m.BirthdaySubscription(
+                    subscriber_user_id=subscriber_user_id,
+                    target_user_id=target_user_id,
+                )
+            )
+            await self._s.flush()
+
+    async def remove(
+        self, subscriber_user_id: int, target_user_id: int
+    ) -> None:
+        await self._s.execute(
+            delete(m.BirthdaySubscription).where(
+                m.BirthdaySubscription.subscriber_user_id == subscriber_user_id,
+                m.BirthdaySubscription.target_user_id == target_user_id,
+            )
+        )
+
+    async def target_ids_of(self, subscriber_user_id: int) -> set[int]:
+        rows = await self._s.scalars(
+            select(m.BirthdaySubscription.target_user_id).where(
+                m.BirthdaySubscription.subscriber_user_id == subscriber_user_id
+            )
+        )
+        return set(rows)
+
+    async def list_all(self) -> list[e.BirthdaySubscription]:
+        rows = await self._s.scalars(
+            select(m.BirthdaySubscription).order_by(m.BirthdaySubscription.id)
+        )
+        return [
+            e.BirthdaySubscription(
+                id=r.id,
+                subscriber_user_id=r.subscriber_user_id,
+                target_user_id=r.target_user_id,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+
+    async def delete_for_user(self, user_id: int) -> None:
+        await self._s.execute(
+            delete(m.BirthdaySubscription).where(
+                or_(
+                    m.BirthdaySubscription.subscriber_user_id == user_id,
+                    m.BirthdaySubscription.target_user_id == user_id,
+                )
+            )
+        )
+
+
+class SqlBirthdayReminderRepository:
+    """Репозиторий журнала напоминаний о днях рождения."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, reminder: e.BirthdayReminder) -> None:
+        self._s.add(
+            m.BirthdayReminder(
+                subscriber_user_id=reminder.subscriber_user_id,
+                target_user_id=reminder.target_user_id,
+                kind=reminder.kind,
+                occasion=reminder.occasion,
+            )
+        )
+        await self._s.flush()
+
+    async def list_since(self, day: date) -> list[e.BirthdayReminder]:
+        rows = await self._s.scalars(
+            select(m.BirthdayReminder)
+            .where(m.BirthdayReminder.occasion >= day)
+            .order_by(m.BirthdayReminder.id)
+        )
+        return [
+            e.BirthdayReminder(
+                id=r.id,
+                subscriber_user_id=r.subscriber_user_id,
+                target_user_id=r.target_user_id,
+                kind=BirthdayReminderKind(r.kind),
+                occasion=r.occasion,
+                sent_at=r.sent_at,
+            )
+            for r in rows
+        ]
+
+    async def delete_for_user(self, user_id: int) -> None:
+        await self._s.execute(
+            delete(m.BirthdayReminder).where(
+                or_(
+                    m.BirthdayReminder.subscriber_user_id == user_id,
+                    m.BirthdayReminder.target_user_id == user_id,
+                )
+            )
+        )
 
 
 class SqlActionLogRepository:

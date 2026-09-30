@@ -2,8 +2,9 @@
 
 Последовательность старта: настройка логов → сборка контейнера → сидинг
 справочных данных, регистрация актуальных версий документов о ПД
-(``docs/legal/``) и bootstrap-администратора → фоновая задача
-автозавершения событий календаря → запуск Long Poll.
+(``docs/legal/``) и bootstrap-администратора → фоновые задачи
+(автозавершение событий календаря, напоминания о днях рождения) → запуск
+Long Poll.
 
 Применение миграций (``alembic upgrade head``) выполняется отдельно на этапе
 запуска контейнера (entrypoint), до старта бота.
@@ -11,7 +12,7 @@
 
 import asyncio
 import contextlib
-from datetime import datetime
+from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
 from avrora_bot.adapters.database.seed import (
@@ -34,6 +35,15 @@ _AUTO_COMPLETE_INTERVAL_SEC = 15 * 60
 # Предел одного прохода: зависший запрос к БД не должен навсегда
 # остановить автозавершение и удерживать соединение из пула.
 _AUTO_COMPLETE_TIMEOUT_SEC = 2 * 60
+
+# Напоминания о днях рождения: проверка запускается в 10:00 по времени клуба
+# (настройка TZ, по умолчанию Москва). После 10:00 проверка повторяется раз
+# в 15 минут до конца суток — это догоняет неудавшуюся отправку и сразу
+# напоминает по только что оформленной подписке; повторов нет, всё
+# отправленное записано в журнале ``birthday_reminders``.
+_BIRTHDAY_REMINDERS_START = time(10, 0)
+_BIRTHDAY_REMINDERS_INTERVAL_SEC = 15 * 60
+_BIRTHDAY_REMINDERS_TIMEOUT_SEC = 5 * 60
 
 
 async def _bootstrap(container: Container) -> None:
@@ -82,6 +92,42 @@ async def _auto_complete_events(container: Container) -> None:
         await asyncio.sleep(_AUTO_COMPLETE_INTERVAL_SEC)
 
 
+def _seconds_until_birthday_check(now: datetime) -> float:
+    """Пауза до следующей проверки ДР; ``0`` — проверять прямо сейчас.
+
+    До 10:00 — ждём ровно до 10:00; с 10:00 и до конца суток — сразу.
+    """
+    start = datetime.combine(now.date(), _BIRTHDAY_REMINDERS_START)
+    return max((start - now).total_seconds(), 0.0)
+
+
+async def _send_birthday_reminders(container: Container) -> None:
+    """С 10:00 по времени клуба рассылает напоминания о днях рождения.
+
+    Ошибка или превышение таймаута одного прохода логируются и не
+    останавливают задачу.
+    """
+    while True:
+        now = container.clock.now().replace(tzinfo=None)
+        wait = _seconds_until_birthday_check(now)
+        if wait > 0:
+            await asyncio.sleep(wait)
+            continue
+        try:
+            async with asyncio.timeout(_BIRTHDAY_REMINDERS_TIMEOUT_SEC):
+                sent = await container.birthdays.send_due_reminders(now.date())
+            if sent:
+                log.info('birthdays.reminders_sent', count=sent)
+        except TimeoutError:
+            log.error(
+                'birthdays.reminders_timeout',
+                timeout_sec=_BIRTHDAY_REMINDERS_TIMEOUT_SEC,
+            )
+        except Exception:
+            log.exception('birthdays.reminders_failed')
+        await asyncio.sleep(_BIRTHDAY_REMINDERS_INTERVAL_SEC)
+
+
 async def run() -> None:
     """Асинхронная точка входа: инициализация и запуск бота."""
     settings = get_settings()
@@ -99,13 +145,18 @@ async def run() -> None:
             detail='Callback API вне периметра Этапа 1, используется Long Poll',
         )
 
-    auto_complete = asyncio.create_task(_auto_complete_events(container))
+    background = [
+        asyncio.create_task(_auto_complete_events(container)),
+        asyncio.create_task(_send_birthday_reminders(container)),
+    ]
     try:
         log.info('app.polling_start')
         await container.bot.run_polling()
     finally:
-        auto_complete.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await auto_complete
+        for task in background:
+            task.cancel()
+        for task in background:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         await container.engine.dispose()
         log.info('app.stopped')

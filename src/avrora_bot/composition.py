@@ -20,6 +20,7 @@ from avrora_bot.adapters.vk.context import BotContext
 from avrora_bot.adapters.vk.gateway import VkbottleGateway
 from avrora_bot.application.services.clock import ClubClock
 from avrora_bot.application.use_cases.balances import BalanceUseCases
+from avrora_bot.application.use_cases.birthdays import BirthdayUseCases
 from avrora_bot.application.use_cases.calendar import CalendarUseCases
 from avrora_bot.application.use_cases.finance import FinanceUseCases
 from avrora_bot.application.use_cases.legal import LegalUseCases
@@ -46,6 +47,8 @@ class Container:
     gateway: VkbottleGateway
     bot: Bot
     report_dir: Path
+    birthdays: BirthdayUseCases
+    clock: ClubClock
 
 
 def build_container(settings: Settings) -> Container:
@@ -66,6 +69,7 @@ def build_container(settings: Settings) -> Container:
     registration = RegistrationUseCases(uow_factory, gateway)
     subscriptions = SubscriptionUseCases(uow_factory, gateway)
     clock = ClubClock(settings.tz)
+    birthdays = BirthdayUseCases(uow_factory, gateway)
     ctx = BotContext(
         registration=registration,
         legal=LegalUseCases(uow_factory),
@@ -78,6 +82,7 @@ def build_container(settings: Settings) -> Container:
         user_management=UserManagementUseCases(uow_factory, gateway),
         finance=FinanceUseCases(uow_factory, gateway),
         balances=BalanceUseCases(uow_factory, gateway, clock),
+        birthdays=birthdays,
         clock=clock,
     )
 
@@ -100,4 +105,6 @@ def build_container(settings: Settings) -> Container:
         gateway=gateway,
         bot=bot,
         report_dir=report_dir,
+        birthdays=birthdays,
+        clock=clock,
     )

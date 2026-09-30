@@ -9,6 +9,7 @@ from avrora_bot.adapters.vk.gateway import VkbottleGateway
 from avrora_bot.adapters.vk.handlers import (
     admin,
     balances,
+    birthdays,
     calendar,
     common,
     expenses,
@@ -50,5 +51,6 @@ def register_handlers(
     expenses.register(bot, ctx, gateway, report_dir)
     balances.register(bot, ctx, gateway, report_dir)
     calendar.register(bot, ctx)
+    birthdays.register(bot, ctx)
     reports.register(bot, ctx, gateway, report_dir)
     common.register(bot, ctx, schedule_url=schedule_url)

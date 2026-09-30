@@ -9,6 +9,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from avrora_bot.domain.enums import (
+    BirthdayReminderKind,
     EventStatus,
     EventType,
     ExpenseCategory,
@@ -255,6 +256,36 @@ class CalendarEvent:
     author_vk_id: int
     id: int | None = None
     status: EventStatus = EventStatus.PLANNED
+
+
+@dataclass(slots=True)
+class BirthdaySubscription:
+    """Подписка поздравителя на день рождения участника.
+
+    У каждого поздравителя свой список: пара (кто следит, за кем) уникальна.
+    """
+
+    subscriber_user_id: int
+    target_user_id: int
+    id: int | None = None
+    created_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class BirthdayReminder:
+    """Запись журнала отправленных напоминаний о дне рождения.
+
+    ``occasion`` — дата самого дня рождения, о котором напомнили (в году
+    наступления). Тройка (вид, кому, о ком) на одну ``occasion`` отправляется
+    один раз — по журналу бот не повторяется и догоняет пропущенное.
+    """
+
+    subscriber_user_id: int
+    target_user_id: int
+    kind: BirthdayReminderKind
+    occasion: date
+    id: int | None = None
+    sent_at: datetime | None = None
 
 
 @dataclass(slots=True)

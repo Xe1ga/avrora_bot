@@ -19,6 +19,7 @@ def main_menu(roles: frozenset[RoleName] = frozenset()) -> str:
     is_admin = has_access(roles, RoleName.ADMIN)
     is_collector = has_access(roles, RoleName.COLLECTOR)
     is_curator = has_access(roles, RoleName.CURATOR)
+    is_greeter = has_access(roles, RoleName.GREETER)
 
     kb = (
         Keyboard(one_time=False)
@@ -71,6 +72,10 @@ def main_menu(roles: frozenset[RoleName] = frozenset()) -> str:
                 '🗓 Календарь: управление',
                 payload={'cmd': 'calendar_help'},
             )
+        )
+    if is_greeter:
+        kb = kb.row().add(
+            Text('🎂 Дни рождения', payload={'cmd': 'birthdays_help'})
         )
     return kb.get_json()
 
@@ -367,6 +372,39 @@ def calendar_actions() -> str:
                 '📅 Создать тренировки на следующий месяц',
                 payload={'cmd': 'calendar_generate_trainings'},
             )
+        )
+    )
+    return kb.get_json()
+
+
+def birthday_actions() -> str:
+    """Инлайн-кнопки раздела «Дни рождения» (поздравитель/админ)."""
+    kb = (
+        Keyboard(inline=True)
+        .add(
+            Text('➕ Подписаться', payload={'cmd': 'birthdays_subscribe'}),
+            color=KeyboardButtonColor.POSITIVE,
+        )
+        .add(Text('➖ Отписаться', payload={'cmd': 'birthdays_unsubscribe'}))
+        .row()
+        .add(Text('📋 Список отслеживаемых', payload={'cmd': 'birthdays_list'}))
+    )
+    return kb.get_json()
+
+
+def birthday_subscribe_prompt() -> str:
+    """Клавиатура шага «на кого подписаться»: «на всех» и «Отмена»."""
+    kb = (
+        Keyboard(one_time=True)
+        .add(
+            Text(
+                'Подписаться на всех',
+                payload={'cmd': 'birthdays_subscribe_all'},
+            )
+        )
+        .add(
+            Text('Отмена', payload={'cmd': 'cancel'}),
+            color=KeyboardButtonColor.NEGATIVE,
         )
     )
     return kb.get_json()

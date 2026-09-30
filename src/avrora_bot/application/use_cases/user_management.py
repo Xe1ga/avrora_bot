@@ -149,6 +149,10 @@ class UserManagementUseCases:
             for role in await uow.roles.roles_of(user.id):
                 await uow.roles.revoke(user.id, role)
             user.roles = set()  # отражаем снятые роли в возвращаемой сущности
+            # Подписки на ДР и журнал напоминаний (дата в нём — день
+            # рождения) — в обе стороны: и как поздравителя, и как именинника.
+            await uow.birthday_subscriptions.delete_for_user(user.id)
+            await uow.birthday_reminders.delete_for_user(user.id)
             await record_action(
                 uow,
                 admin_vk_id,

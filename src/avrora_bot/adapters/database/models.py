@@ -32,6 +32,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from avrora_bot.adapters.database.base import Base, TimestampMixin
 from avrora_bot.domain.enums import (
+    BirthdayReminderKind,
     EventStatus,
     EventType,
     ExpenseCategory,
@@ -454,6 +455,59 @@ class BalanceAdjustment(Base, TimestampMixin):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     reason: Mapped[str] = mapped_column(String(_ADJUSTMENT_REASON_LEN))
     created_by_vk_id: Mapped[int] = mapped_column(Integer)
+
+
+class BirthdaySubscription(Base, TimestampMixin):
+    """Подписка поздравителя на день рождения участника."""
+
+    __tablename__ = 'birthday_subscriptions'
+    __table_args__ = (
+        UniqueConstraint(
+            'subscriber_user_id',
+            'target_user_id',
+            name='uq_birthday_subscription',
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    subscriber_user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), index=True
+    )
+    target_user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), index=True
+    )
+
+
+class BirthdayReminder(Base):
+    """Журнал отправленных напоминаний о днях рождения.
+
+    ``occasion`` — дата дня рождения, о котором напомнили; уникальность
+    (кому, о ком, вид, ``occasion``) не даёт отправить одно и то же дважды.
+    """
+
+    __tablename__ = 'birthday_reminders'
+    __table_args__ = (
+        UniqueConstraint(
+            'subscriber_user_id',
+            'target_user_id',
+            'kind',
+            'occasion',
+            name='uq_birthday_reminder',
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    subscriber_user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), index=True
+    )
+    target_user_id: Mapped[int] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'), index=True
+    )
+    kind: Mapped[BirthdayReminderKind] = mapped_column(String(_ENUM_LEN))
+    occasion: Mapped[date] = mapped_column(Date, index=True)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class ActionLog(Base, TimestampMixin):

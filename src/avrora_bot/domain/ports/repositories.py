@@ -11,6 +11,8 @@ from avrora_bot.domain.entities import (
     AccountTransfer,
     ActionLogEntry,
     BalanceAdjustment,
+    BirthdayReminder,
+    BirthdaySubscription,
     CalendarEvent,
     ConsentRecord,
     Expense,
@@ -239,3 +241,37 @@ class ActionLogRepository(Protocol):
     async def add(self, entry: ActionLogEntry) -> ActionLogEntry: ...
 
     async def recent(self, limit: int = 50) -> list[ActionLogEntry]: ...
+
+
+class BirthdaySubscriptionRepository(Protocol):
+    """Подписки поздравителей на дни рождения участников."""
+
+    async def add(self, subscriber_user_id: int, target_user_id: int) -> None:
+        """Добавляет подписку; повторная для той же пары — без эффекта."""
+        ...
+
+    async def remove(
+        self, subscriber_user_id: int, target_user_id: int
+    ) -> None: ...
+
+    async def target_ids_of(self, subscriber_user_id: int) -> set[int]: ...
+
+    async def list_all(self) -> list[BirthdaySubscription]: ...
+
+    async def delete_for_user(self, user_id: int) -> None:
+        """Удаляет подписки, где пользователь — подписчик или отслеживаемый."""
+        ...
+
+
+class BirthdayReminderRepository(Protocol):
+    """Журнал отправленных напоминаний о днях рождения."""
+
+    async def add(self, reminder: BirthdayReminder) -> None: ...
+
+    async def list_since(self, day: date) -> list[BirthdayReminder]:
+        """Записи о днях рождения, наступающих ``day`` и позже."""
+        ...
+
+    async def delete_for_user(self, user_id: int) -> None:
+        """Удаляет записи, где пользователь — получатель или именинник."""
+        ...

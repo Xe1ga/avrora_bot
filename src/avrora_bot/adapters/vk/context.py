@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from avrora_bot.application.services.clock import ClubClock
 from avrora_bot.application.use_cases.balances import BalanceUseCases
+from avrora_bot.application.use_cases.birthdays import BirthdayUseCases
 from avrora_bot.application.use_cases.calendar import CalendarUseCases
 from avrora_bot.application.use_cases.finance import FinanceUseCases
 from avrora_bot.application.use_cases.legal import LegalUseCases
@@ -33,4 +34,5 @@ class BotContext:
     user_management: UserManagementUseCases
     finance: FinanceUseCases
     balances: BalanceUseCases
+    birthdays: BirthdayUseCases
     clock: ClubClock
